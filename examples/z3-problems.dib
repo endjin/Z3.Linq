@@ -1,0 +1,351 @@
+#!markdown
+
+This sample currently requires [VS Code Insiders](https://code.visualstudio.com/insiders/) (and the preview version of the [.NET Interactive extension](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.dotnet-interactive-vscode))
+
+#!csharp
+
+#r "Z3.Linq\bin\Release\net6.0\Z3.Linq.dll"
+#r "Z3.Linq.Examples\bin\Release\net6.0\Z3.Linq.Examples.dll"
+
+#!csharp
+
+#r "nuget:Microsoft.Z3"
+#r "nuget:MiaPlaza.ExpressionUtils"
+
+#!csharp
+
+using System;
+using System.Diagnostics;
+using System.Globalization;
+using Microsoft.Z3;
+
+using Z3.Linq;
+using Z3.Linq.Examples;
+using Z3.Linq.Examples.RiverCrossing;
+using Z3.Linq.Examples.Sudoku;
+
+#!markdown
+
+## Problem 1 - 1st Order Propositional Logic
+
+Provide a solution where either X is true or Y is true.
+
+#!csharp
+
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<(bool x, bool y)>()
+                  where t.x ^ t.y
+                  select t;
+
+    var result = theorem.Solve();
+
+    Console.WriteLine(result);
+}
+
+#!markdown
+
+## Problem 2 - Linear Algebra
+
+Solve the following system with 3 variables, with linear equalities and inequalities.
+
+#!csharp
+
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<Symbols<int, int, int>>()
+                  where t.X1 - t.X2 >= 1
+                  where t.X1 - t.X2 <= 3
+                  where t.X1 == (2 * t.X3) + t.X2
+                  select t;
+
+    var result = theorem.Solve();
+
+    Console.WriteLine(result);
+}
+
+#!markdown
+
+# Problem 3 - Sudoku
+
+How would you solve the following Sudoku Puzzle?
+
+|   |   |   | 2 | 6 |   | 7 |   | 1 |
+|---|---|---|---|---|---|---|---|---|
+| 6 | 8 |   |   | 7 |   |   | 9 |   |
+| 1 | 9 |   |   |   | 4 | 5 |   |   |
+| 8 | 2 |   | 1 |   |   |   | 4 |   |
+|   |   | 4 | 6 |   | 2 | 9 |   |   |
+|   | 5 |   |   |   | 3 |   | 2 | 8 |
+|   |   | 9 | 3 |   |   |   | 7 | 4 |
+|   | 4 |   |   | 5 |   |   | 3 | 6 |
+| 7 |   | 3 |   | 1 | 8 |   |   |   |
+
+We can codify the rules of Sudoku as a series of constraints in a Theorem:
+
+#!markdown
+
+```csharp
+public static class SudokuTheorem
+{
+    public static Theorem<SudokuTable> Create(Z3Context context)
+    {
+        var sudokuTheorem = context.NewTheorem<SudokuTable>();
+
+        var cells = typeof(SudokuTable).GetProperties();
+
+        foreach (var cell in cells)
+        {
+            sudokuTheorem = sudokuTheorem.Where(Between1And9(cell));
+        }
+
+        sudokuTheorem = sudokuTheorem.Where(DistinctRows(cells));
+        sudokuTheorem = sudokuTheorem.Where(DistinctColumns(cells));
+
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell11, t.Cell12, t.Cell13, t.Cell21, t.Cell22, t.Cell23, t.Cell31, t.Cell32, t.Cell33));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell14, t.Cell15, t.Cell16, t.Cell24, t.Cell25, t.Cell26, t.Cell34, t.Cell35, t.Cell36));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell17, t.Cell18, t.Cell19, t.Cell27, t.Cell28, t.Cell29, t.Cell37, t.Cell38, t.Cell39));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell41, t.Cell42, t.Cell43, t.Cell51, t.Cell52, t.Cell53, t.Cell61, t.Cell62, t.Cell63));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell44, t.Cell45, t.Cell46, t.Cell54, t.Cell55, t.Cell56, t.Cell64, t.Cell65, t.Cell66));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell47, t.Cell48, t.Cell49, t.Cell57, t.Cell58, t.Cell59, t.Cell67, t.Cell68, t.Cell69));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell71, t.Cell72, t.Cell73, t.Cell81, t.Cell82, t.Cell83, t.Cell91, t.Cell92, t.Cell93));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell74, t.Cell75, t.Cell76, t.Cell84, t.Cell85, t.Cell86, t.Cell94, t.Cell95, t.Cell96));
+        sudokuTheorem = sudokuTheorem.Where(t => Z3Methods.Distinct(t.Cell77, t.Cell78, t.Cell79, t.Cell87, t.Cell88, t.Cell89, t.Cell97, t.Cell98, t.Cell99));
+
+        return sudokuTheorem;
+    }
+
+    private static Expression<System.Func<SudokuTable, bool>> Between1And9(PropertyInfo cellProperty)
+    {
+        ParameterExpression tParam = Expression.Parameter(typeof(SudokuTable), "t");
+        MemberExpression cell = Expression.Property(tParam, cellProperty);
+
+        ConstantExpression one = Expression.Constant(1, typeof(int));
+        ConstantExpression nine = Expression.Constant(9, typeof(int));
+
+        BinaryExpression cellGreaterThanOrEqual1 = Expression.GreaterThanOrEqual(cell, one);
+        BinaryExpression cellLessThanOrEqual9 = Expression.LessThanOrEqual(cell, nine);
+
+        var expr = Expression.Lambda<System.Func<SudokuTable, bool>>(
+            Expression.And(cellGreaterThanOrEqual1, cellLessThanOrEqual9),
+            new[] { tParam });
+
+        return expr;
+    }
+
+    private static Expression<System.Func<SudokuTable, bool>> Distinct(PropertyInfo[] cells, string cellPattern)
+    {
+        ParameterExpression tParam = Expression.Parameter(typeof(SudokuTable), "t");
+
+        Expression? distincts = null;
+
+        for (int distinctIndex = 1; distinctIndex <= 9; distinctIndex++)
+        {
+            var cellsInDistinct = new List<MemberExpression>();
+            for (int otherIndex = 1; otherIndex <= 9; otherIndex++)
+            {
+                var cellName = string.Format(cellPattern, distinctIndex, otherIndex);
+
+                MemberExpression cell = Expression.Property(tParam, cells.Single(_ => _.Name == cellName));
+                cellsInDistinct.Add(cell);
+            }
+
+            NewArrayExpression distinctArray = Expression.NewArrayInit(typeof(int), cellsInDistinct);
+            MethodCallExpression distinct = Expression.Call(typeof(Z3Methods), "Distinct", new[] { typeof(int) }, distinctArray);
+
+            if (distincts == null)
+            {
+                distincts = distinct;
+            }
+            else
+            {
+                distincts = Expression.And(distincts, distinct);
+            }
+        }
+
+        var expr = Expression.Lambda<System.Func<SudokuTable, bool>>(
+            distincts!,
+            new[] { tParam });
+
+        return expr;
+    }
+
+    private static Expression<System.Func<SudokuTable, bool>> DistinctColumns(PropertyInfo[] cells)
+    {
+        return Distinct(cells, "Cell{1}{0}");
+    }
+
+    private static Expression<System.Func<SudokuTable, bool>> DistinctRows(PropertyInfo[] cells)
+    {
+        return Distinct(cells, "Cell{0}{1}");
+    }
+}
+```
+
+#!markdown
+
+And we can use use the Theorem to express the problem:
+
+|   |   |   | 2 | 6 |   | 7 |   | 1 |
+|---|---|---|---|---|---|---|---|---|
+| 6 | 8 |   |   | 7 |   |   | 9 |   |
+| 1 | 9 |   |   |   | 4 | 5 |   |   |
+| 8 | 2 |   | 1 |   |   |   | 4 |   |
+|   |   | 4 | 6 |   | 2 | 9 |   |   |
+|   | 5 |   |   |   | 3 |   | 2 | 8 |
+|   |   | 9 | 3 |   |   |   | 7 | 4 |
+|   | 4 |   |   | 5 |   |   | 3 | 6 |
+| 7 |   | 3 |   | 1 | 8 |   |   |   |
+
+using the following syntax:
+
+#!csharp
+
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in SudokuTheorem.Create(ctx)
+                  where t.Cell14 == 2 && t.Cell15 == 6 && t.Cell17 == 7 && t.Cell19 == 1
+                  where t.Cell21 == 6 && t.Cell22 == 8 && t.Cell25 == 7 && t.Cell28 == 9
+                  where t.Cell31 == 1 && t.Cell32 == 9 && t.Cell36 == 4 && t.Cell37 == 5
+                  where t.Cell41 == 8 && t.Cell42 == 2 && t.Cell44 == 1 && t.Cell48 == 4
+                  where t.Cell53 == 4 && t.Cell54 == 6 && t.Cell56 == 2 && t.Cell57 == 9
+                  where t.Cell62 == 5 && t.Cell66 == 3 && t.Cell68 == 2 && t.Cell69 == 8
+                  where t.Cell73 == 9 && t.Cell74 == 3 && t.Cell78 == 7 && t.Cell79 == 4
+                  where t.Cell82 == 4 && t.Cell85 == 5 && t.Cell88 == 3 && t.Cell89 == 6
+                  where t.Cell91 == 7 && t.Cell93 == 3 && t.Cell95 == 1 && t.Cell96 == 8
+                  select t;
+
+    var result = theorem.Solve();
+    
+    Console.WriteLine(result);
+}
+
+#!markdown
+
+## Problem 4 - Missionaries and Cannibals
+
+#!markdown
+
+On one bank of a river are three missionaries and three cannibals. 
+
+There is one boat available that can hold up to two people and that they would like to use to cross the river. 
+
+If the cannibals ever outnumber the missionaries on either of the river’s banks, the missionaries will get eaten.
+
+How can the boat be used to safely carry all the missionaries and cannibals across the river?
+
+#!markdown
+
+You can codify the rules as constraints:
+
+```csharp
+var theorem = context.NewTheorem<MissionariesAndCannibals>();
+            
+// Initial state
+theorem = theorem.Where(t => t.Missionaries[0] == t.MissionaryAndCannibalCount && t.Cannibals[0] == t.MissionaryAndCannibalCount);
+
+// Transition model: We filter each step according to legal moves
+for (int iclosure = 0; iclosure < maxLength; iclosure++)
+{
+    var i = iclosure;
+    //The 2 banks cannot have more people than the initial population
+    theorem = theorem.Where(t => t.Cannibals[i] >= 0
+                                    && t.Cannibals[i] <= t.MissionaryAndCannibalCount
+                                    && t.Missionaries[i] >= 0
+                                    && t.Missionaries[i] <= t.MissionaryAndCannibalCount);
+    if (i % 2 == 0)
+    {
+        // On even steps, the starting bank loses between 1 and SizeBoat people 
+        theorem = theorem.Where(t => t.Cannibals[i + 1] <= t.Cannibals[i]
+                                        && t.Missionaries[i + 1] <= t.Missionaries[i]
+                                        && t.Cannibals[i + 1] + t.Missionaries[i + 1] - t.Cannibals[i] - t.Missionaries[i] < 0
+                                        && t.Cannibals[i + 1] + t.Missionaries[i + 1] - t.Cannibals[i] - t.Missionaries[i] >= -t.SizeBoat);
+
+    }
+    else
+    {
+        // On odd steps, the starting bank gains between 1 and SizeBoat people
+        theorem = theorem.Where(t =>
+                                    t.Cannibals[i + 1] >= t.Cannibals[i]
+                                    && t.Missionaries[i + 1] >= t.Missionaries[i]
+                                    && t.Cannibals[i + 1] + t.Missionaries[i + 1] - t.Cannibals[i] - t.Missionaries[i] > 0
+                                    && t.Cannibals[i + 1] + t.Missionaries[i + 1] - t.Cannibals[i] - t.Missionaries[i] <= t.SizeBoat);
+
+    }
+
+    //Never less missionaries than cannibals on any bank
+    theorem = theorem.Where(t => (t.Missionaries[i] == 0 || (t.Missionaries[i] >= t.Cannibals[i]))
+                                && (t.Missionaries[i] == t.MissionaryAndCannibalCount || ((t.MissionaryAndCannibalCount - t.Missionaries[i]) >= (t.MissionaryAndCannibalCount - t.Cannibals[i]))));
+
+}
+
+// Goal state
+// When finished, No more people on the starting bank
+theorem = theorem.Where(
+    t => t.Length > 0
+            && t.Length < maxLength
+            && t.Missionaries[t.Length - 1] == 0
+            && t.Cannibals[t.Length - 1] == 0
+);
+```
+
+#!markdown
+
+Now we have everything we need in order solve the problem. This time, rather than "Solving" the theorem, we use an Optimisation strategy to find the solution with the least number of steps. 
+
+#!csharp
+
+using (var ctx = new Z3Context())
+{
+    var theorem =
+        from t in  MissionariesAndCannibals.Create(ctx, 50)
+        where t.MissionaryAndCannibalCount == 3
+        where t.SizeBoat == 2
+        select t;
+ 
+    var result = theorem.Optimize(Optimization.Minimize, t => t.Length);
+
+    Console.WriteLine(result);
+}
+
+#!markdown
+
+## Problem 5 - Price Optimised Oil Purchasing
+
+In this example, we have two  countries that produce crude oil which we refine into three end-products: gasoline, jet fuel, and lubricant. The crude oil from each country yields different quantities of end-products once the oil is refined:
+
+|            | Saudi Arabia  | Venezuela      |
+|---         | ---           | ---            |
+| Cost       | $20 / barrel  | $15 / barrel   |
+| Max Order  | 9000 barrels  | 6000 barrels   |
+| Refining % | 30% gasolene  | 40% gasolene   |
+|            | 40% jet fuel  | 20% jet fuel   |
+|            | 20% lubricant | 30% lubricant  |
+|            | 10% waste     | 10% waste      |
+
+Given we need to produce the following volume of refined end-product:
+
+| Product   | Amount (barrels) |
+| ---       | ---              |
+| Gasolene  | 1900             |
+| Jet Fuel  | 1500             |
+| Lubricant | 500              |
+
+ What is the most cost efficient purchase strategy of crude oil from Saudi Arabia and Venezuela?
+
+#!csharp
+
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<(double sa, double vz)>()
+                    where 0.3 * t.sa + 0.4 * t.vz >= 1900 // Gasolene
+                    where 0.4 * t.sa + 0.2 * t.vz >= 1500 // Jet fuel
+                    where 0.2 * t.sa + 0.3 * t.vz >= 500  // Lubricant
+                    where 0 <= t.sa && t.sa <= 9000 // Max # barrels we can purchase
+                    where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
+                    select t;
+
+    var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz));
+
+    Console.WriteLine($"Saudia Arabia: {result.sa} barrels ({(result.sa * 20).ToString("C", CultureInfo.CreateSpecificCulture("en-US"))}), Venezuela: {result.vz} barrels ({(result.vz * 15).ToString("C", CultureInfo.CreateSpecificCulture("en-US"))})");
+}

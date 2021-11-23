@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  
+  <PropertyGroup>
+    <PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
+    <PackageTags>Z3; LINQ; Solver</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MiaPlaza.ExpressionUtils" Version="1.2.0" />
+    <PackageReference Include="Microsoft.Z3" Version="4.8.12" />
+  </ItemGroup>
+
+</Project>
