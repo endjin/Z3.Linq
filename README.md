@@ -10,7 +10,7 @@
 * [LINQ to Z3 - Part 2 – LINQ to the Unexpected](docs/blogs/part-02-linq-to-the-unexpected.md)
 * [LINQ to Z3 - Part 3 – Theorem Solving On Steroids](docs/blogs/part-03-theorem-solving-on-steroids.md)
 
-2010: Bart was [interviewed on Channel 9](https://vimeo.com/648767290) about the LINQ to Z3:
+2010: Bart was [interviewed on Channel 9](https://vimeo.com/648767290) about the LINQ to Z3 concept:
 
 [![LINQ to Z3 Channel 9 interview](docs/blogs/images/linq-to-z3-channel9.jpg)](https://vimeo.com/648767290)
 
@@ -26,4 +26,4 @@
 
 2020: [Karel Frajtak](https://github.com/kfrajtak) adds [support for fractions](https://github.com/kfrajtak/Z3.LinqBinding).
 
-2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0` (adding [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support and demonstrate using `record` types) and `Z3 v4.4.0`, merge in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, create archives of Bart's original blog posts and talks. They republish the project as [Z3.Linq](https://github.com/endjin/Z3.Linq), create a new [.NET Interactive Notebook](https://github.com/dotnet/interactive) of [samples](examples/z3-problems.dib), and publish a nuget package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
+2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0` adding [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support, demonstrate using `record` types, and fix nullability issues. They upgrade the solution to use [Z3 Nuget package](https://www.nuget.org/packages/Microsoft.Z3.x64/), merge in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, create archives of Bart's original blog posts and talks. They republish the project as [Z3.Linq](https://github.com/endjin/Z3.Linq), create a new [.NET Interactive Notebook](https://github.com/dotnet/interactive) of [samples](examples/z3-problems.dib), and publish a nuget package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
