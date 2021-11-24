@@ -4,16 +4,15 @@ using System.Text;
 
 /// <summary>
 /// This class solves the famous <see href="https://en.wikipedia.org/wiki/Missionaries_and_cannibals_problem">Missionaries and cannibals problem</see>
-/// "Three missionaries and three cannibals must cross a river using a boat which can carry at most two people, under the constraint that, for both banks, if there are missionaries present on the bank, they cannot be outnumbered by cannibals
-/// (if they were, the cannibals would eat the missionaries). The boat cannot cross the river by itself with no people on board.
-/// The class contains the state representation for the problem and embeds the rules into a Z3 solving theorem
+/// "Three missionaries and three cannibals must cross a river using a boat which can carry at most two people, under the constraint that, for both banks, 
+/// if there are missionaries present on the bank, they cannot be outnumbered by cannibals (if they were, the cannibals would eat the missionaries). 
+/// The boat cannot cross the river by itself with no people on board. The class contains the state representation for the problem and embeds the rules into a Z3 solving theorem
 /// </summary>
 /// <remarks>
 /// <para>
 /// Unlike, say, Sudoku, where the end state is the solution, here the end state is known up front: it's the state
 /// where everyone is on the far bank. The information we want Z3 to generate is the series of steps that get from
 /// the start state to that known end state.
-/// there,
 /// </para>
 /// </remarks>
 public class MissionariesAndCannibals
