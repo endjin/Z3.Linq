@@ -39,7 +39,7 @@ using Z3.Linq.Examples.Sudoku;
 
 ## Problem 1 - 1st Order Propositional Logic
 
-Provide a solution where either X is true or Y is true.
+Provide a solution where either X is true or Y is true (but not both).
 
 #!csharp
 
