@@ -68,12 +68,12 @@ Given we need to produce the following volume of refined end-product:
 using (var ctx = new Z3Context())
 {
     var theorem = from t in ctx.NewTheorem<(double sa, double vz)>()
-                    where 0.3 * t.sa + 0.4 * t.vz >= 1900 // Gasolene
-                    where 0.4 * t.sa + 0.2 * t.vz >= 1500 // Jet fuel
-                    where 0.2 * t.sa + 0.3 * t.vz >= 500  // Lubricant
-                    where 0 <= t.sa && t.sa <= 9000 // Max # barrels we can purchase
-                    where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
-                    select t;
+                  where 0.3 * t.sa + 0.4 * t.vz >= 1900 // Gasolene
+                  where 0.4 * t.sa + 0.2 * t.vz >= 1500 // Jet fuel
+                  where 0.2 * t.sa + 0.3 * t.vz >= 500  // Lubricant
+                  where 0 <= t.sa && t.sa <= 9000 // Max # barrels we can purchase
+                  where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
+                  select t;
 
     var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz)); // Optimize for cost
 
