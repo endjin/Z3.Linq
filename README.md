@@ -8,7 +8,7 @@ A number of examples are included in this solution, which you can run [from .NET
 
 ### Problem - 1st Order Propositional Logic
 
-Provide a solution where either X is true or Y is true (using a [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0)).
+Provide a solution where either X is true or Y is true, but not both (using a [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0)).
 
 ```csharp
 using (var ctx = new Z3Context())
@@ -103,7 +103,7 @@ Then you can copy any of the above samples.
 ### For Visual Studio
 
 Add the `Z3.Linq` package.
-Configure you application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3.x64](https://www.nuget.org/packages/Microsoft.Z3.x64/) package.
+Configure your application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3.x64](https://www.nuget.org/packages/Microsoft.Z3.x64/) package.
 
 ## Contributing
 
