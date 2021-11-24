@@ -2,6 +2,85 @@
 
 `.NET 6.0` LINQ bindings for the [Z3 theorem prover](https://github.com/Z3Prover/z3) from [Microsoft Research](https://www.microsoft.com/en-us/research/).
 
+## Examples
+
+A number of examples are included in this solution, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires Visual Studio Code [Insiders Build](https://code.visualstudio.com/insiders/)) or [from Visual Studio](solutions/Z3.Linq.Demo/Program.cs).
+
+### Problem - 1st Order Propositional Logic
+
+Provide a solution where either X is true or Y is true (using a [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0)).
+
+```csharp
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<(bool x, bool y)>()
+                  where t.x ^ t.y
+                  select t;
+
+    var result = theorem.Solve();
+
+    Console.WriteLine(result);
+}
+```
+
+### Problem - Linear Algebra
+
+Solve the following system with 3 variables, with linear equalities and inequalities.
+
+```csharp
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<Symbols<int, int, int>>()
+                  where t.X1 - t.X2 >= 1
+                  where t.X1 - t.X2 <= 3
+                  where t.X1 == (2 * t.X3) + t.X2
+                  select t;
+
+    var result = theorem.Solve();
+
+    Console.WriteLine(result);
+}
+```
+
+### Problem - Price Optimised Oil Purchasing
+
+In this example, we have two  countries that produce crude oil which we refine into three end-products: gasoline, jet fuel, and lubricant. The crude oil from each country yields different quantities of end-products once the oil is refined:
+
+|            | Saudi Arabia  | Venezuela      |
+|---         | ---           | ---            |
+| Cost       | $20 / barrel  | $15 / barrel   |
+| Max Order  | 9000 barrels  | 6000 barrels   |
+| Refining % | 30% gasolene  | 40% gasolene   |
+|            | 40% jet fuel  | 20% jet fuel   |
+|            | 20% lubricant | 30% lubricant  |
+|            | 10% waste     | 10% waste      |
+
+Given we need to produce the following volume of refined end-product:
+
+| Product   | Amount (barrels) |
+| ---       | ---              |
+| Gasolene  | 1900             |
+| Jet Fuel  | 1500             |
+| Lubricant | 500              |
+
+ What is the most cost efficient purchase strategy of crude oil from Saudi Arabia and Venezuela?
+```csharp
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<(double sa, double vz)>()
+                    where 0.3 * t.sa + 0.4 * t.vz >= 1900 // Gasolene
+                    where 0.4 * t.sa + 0.2 * t.vz >= 1500 // Jet fuel
+                    where 0.2 * t.sa + 0.3 * t.vz >= 500  // Lubricant
+                    where 0 <= t.sa && t.sa <= 9000 // Max # barrels we can purchase
+                    where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
+                    select t;
+
+    var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz));
+
+    Console.WriteLine($"SA: {result.sa} barrels (${result.sa * 20}), VZ: {result.vz} barrels (${result.vz * 15})");
+}
+```
+
 ## History
 
 2009: Bart De Smet describes a prototype LINQ to Z3 binding in three blog posts:
