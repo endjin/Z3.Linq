@@ -75,7 +75,7 @@ using (var ctx = new Z3Context())
                     where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
                     select t;
 
-    var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz));
+    var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz)); // Optimize for cost
 
     Console.WriteLine($"SA: {result.sa} barrels (${result.sa * 20}), VZ: {result.vz} barrels (${result.vz * 15})");
 }
