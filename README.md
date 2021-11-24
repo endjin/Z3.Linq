@@ -1,6 +1,6 @@
 # Z3.Linq
 
-`.NET 6.0` LINQ bindings for the [Z3 theorem prover](https://github.com/Z3Prover/z3) from [Microsoft Research](https://www.microsoft.com/en-us/research/).
+.NET 6.0 LINQ bindings for the [Z3 theorem prover](https://github.com/Z3Prover/z3) from [Microsoft Research](https://www.microsoft.com/en-us/research/).
 
 ## Examples
 
@@ -81,6 +81,31 @@ using (var ctx = new Z3Context())
 }
 ```
 
+## Getting Started
+
+You can install the [Z3.Linq NuGet Package](https://www.nuget.org/packages/Z3.Linq/).
+
+### For .NET Interactive
+
+Add the package:
+```
+#r "nuget:Z3.Linq"
+```
+Then add the following using statements:
+
+```csharp
+using System;
+using Microsoft.Z3;
+using Z3.Linq;
+```
+Then you can copy any of the above samples.
+
+### For Visual Studio
+
+Add the `Z3.Linq` package.
+Configure you application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3.x64](https://www.nuget.org/packages/Microsoft.Z3.x64/) package.
+
+
 ## History
 
 2009: Bart De Smet describes a prototype LINQ to Z3 binding in three blog posts:
@@ -105,4 +130,4 @@ using (var ctx = new Z3Context())
 
 2020: [Karel Frajtak](https://github.com/kfrajtak) adds [support for fractions](https://github.com/kfrajtak/Z3.LinqBinding).
 
-2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0` adding [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support, demonstrate using `record` types, and fix nullability issues. They upgrade the solution to use [Z3 Nuget package](https://www.nuget.org/packages/Microsoft.Z3.x64/), merge in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, create archives of Bart's original blog posts and talks. They republish the project as [Z3.Linq](https://github.com/endjin/Z3.Linq), create a new [.NET Interactive Notebook](https://github.com/dotnet/interactive) of [samples](examples/z3-problems.dib), and publish a nuget package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
+2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0` adding [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support, demonstrate using `record` types, and fix nullability issues. They upgrade the solution to use [Z3 NuGet package](https://www.nuget.org/packages/Microsoft.Z3.x64/), merge in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, create archives of Bart's original blog posts and talks. They republish the project as [Z3.Linq](https://github.com/endjin/Z3.Linq), create a new [.NET Interactive Notebook](https://github.com/dotnet/interactive) of [samples](examples/z3-problems.dib), and publish a NuGet package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
