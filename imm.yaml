@@ -87,13 +87,7 @@
     Measures:
         -
             Score: 1
-            Description: 'Copyright headers in each source file'
-        -
-            Score: 1
             Description: 'License in Source & Packages'
-        -
-            Score: 1
-            Description: 'Contributor License Agreement Configured in Repo'
 -
     Name: 'Production Use'
     Id: 87ee2c3e-b17a-4939-b969-2c9c034d05d7
