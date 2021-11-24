@@ -23,9 +23,9 @@ public sealed class Z3Context : IDisposable
     public Z3Context()
     {
         this.config = new Dictionary<string, string>
-            {
-                { "MODEL", "true" }
-            };
+        {
+            { "MODEL", "true" }
+        };
     }
 
     /// <summary>
