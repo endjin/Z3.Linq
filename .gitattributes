@@ -1,0 +1,8 @@
+* text=auto
+
+*.cs text=auto diff=csharp
+*.csproj text=auto
+
+*.jpg  	binary
+*.png 	binary
+*.gif 	binary

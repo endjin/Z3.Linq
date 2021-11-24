@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net6.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PlatformTarget>x64</PlatformTarget>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<Authors>bartdesmet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
+		<PackageDescription>Sample Theorems for Sudoku and River Crossing problems.</PackageDescription>
+		<PackageTags>Z3; LINQ; Solver; SMT; Examples; Sudoku; Bart De Smet</PackageTags>
+		<PackageReleaseNotes></PackageReleaseNotes>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Z3.Linq\Z3.Linq.csproj" />
+	</ItemGroup>
+
+</Project>

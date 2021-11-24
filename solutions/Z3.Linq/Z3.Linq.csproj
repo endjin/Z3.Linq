@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  
+  <PropertyGroup>
+	<Authors>bartdesmet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
+	<PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
+    <PackageTags>Z3; LINQ; Solver; SMT; Bart De Smet</PackageTags>
+    <Description>LINQ bindings for Z3, a satisfiability modulo theories solver from Microsoft Research. Based on a proof of concept from Bart De Smet.</Description>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MiaPlaza.ExpressionUtils" Version="1.2.0" />
+    <PackageReference Include="Microsoft.Z3" Version="4.8.12" />
+  </ItemGroup>
+
+</Project>
