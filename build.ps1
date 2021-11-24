@@ -122,7 +122,7 @@ $GitVersionToolVersion = "5.8.0"
 #
 # Build process configuration
 #
-$SolutionToBuild = (Resolve-Path (Join-Path $here ".\Solutions\Z3.LinqBinding.sln")).Path
+$SolutionToBuild = (Resolve-Path (Join-Path $here ".\solutions\Z3.Linq.sln")).Path
 
 # Synopsis: Build, Test and Package
 task . FullBuild
