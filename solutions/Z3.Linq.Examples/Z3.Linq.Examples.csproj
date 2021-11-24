@@ -9,12 +9,12 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<Authors>Bart De Smet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
+		<Authors>bartdesmet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
 		<PackageDescription>Sample Theorems for Sudoku and River Crossing problems.</PackageDescription>
-		<PackageTags>Z3; LINQ; Solver; SMT; Examples; Sudoku</PackageTags>
+		<PackageTags>Z3; LINQ; Solver; SMT; Examples; Sudoku; Bart De Smet</PackageTags>
 		<PackageReleaseNotes></PackageReleaseNotes>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	</PropertyGroup>
