@@ -9,9 +9,12 @@
   </PropertyGroup>
   
   <PropertyGroup>
+	<PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
     <RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
-    <PackageTags>Z3; LINQ; Solver</PackageTags>
+    <PackageTags>Z3; LINQ; Solver; SMT</PackageTags>
+    <Description>LINQ bindings for Z3, a satisfiability modulo theories solver from Microsoft Research.</Description>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
   <ItemGroup>
