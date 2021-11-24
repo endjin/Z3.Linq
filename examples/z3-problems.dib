@@ -17,7 +17,8 @@ Or you can simply use the public NuGet packages:
 
 #!csharp
 
-#r "nuget:Z3.Linq"
+#r "nuget:Z3.Linq,*-*"
+#r "nuget:Z3.Linq.Examples,*-*"
 
 #!markdown
 
