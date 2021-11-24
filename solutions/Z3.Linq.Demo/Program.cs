@@ -16,11 +16,10 @@ public static class Program
 
         using (var ctx = new Z3Context())
         {
-            var theorem =
-                from t in MissionariesAndCannibals.Create(ctx, 50)
-                where t.MissionaryAndCannibalCount == 3
-                where t.SizeBoat == 2
-                select t;
+            var theorem = from t in MissionariesAndCannibals.Create(ctx, 50)
+                          where t.MissionaryAndCannibalCount == 3
+                          where t.SizeBoat == 2
+                          select t;
 
             var sw = Stopwatch.StartNew();
             MissionariesAndCannibals? result = theorem.Solve();
@@ -161,7 +160,6 @@ public static class Program
                           where t.Cell73 == 9 && t.Cell74 == 3 && t.Cell78 == 7 && t.Cell79 == 4
                           where t.Cell82 == 4 && t.Cell85 == 5 && t.Cell88 == 3 && t.Cell89 == 6
                           where t.Cell91 == 7 && t.Cell93 == 3 && t.Cell95 == 1 && t.Cell96 == 8
-
                           select t;
 
             var result = theorem.Solve();
