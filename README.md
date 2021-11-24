@@ -105,6 +105,17 @@ Then you can copy any of the above samples.
 Add the `Z3.Linq` package.
 Configure you application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3.x64](https://www.nuget.org/packages/Microsoft.Z3.x64/) package.
 
+## Contributing
+
+There are a number of ways in which you could contribute to this project:
+
+- Create new examples!
+- Improve the documentation.
+- Report / fix bugs.
+- Suggest any implementation improvements or optimizations.
+- Blog about the project!
+
+All PRs are welcome.
 
 ## History
 
