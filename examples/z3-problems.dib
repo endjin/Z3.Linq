@@ -2,22 +2,32 @@
 
 This sample currently requires [VS Code Insiders](https://code.visualstudio.com/insiders/) (and the preview version of the [.NET Interactive extension](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.dotnet-interactive-vscode))
 
+#!markdown
+
+If you want to run this locally, you need to build the solution in Debug mode and then reference the binaries:
+
 #!csharp
 
-#r "Z3.Linq\bin\Release\net6.0\Z3.Linq.dll"
-#r "Z3.Linq.Examples\bin\Release\net6.0\Z3.Linq.Examples.dll"
+#r "Z3.Linq\bin\Debug\net6.0\Z3.Linq.dll"
+#r "Z3.Linq.Examples\bin\Debug\net6.0\Z3.Linq.Examples.dll"
+
+#!markdown
+
+Or you can simply use the public NuGet packages:
 
 #!csharp
 
-#r "nuget:Microsoft.Z3"
-#r "nuget:MiaPlaza.ExpressionUtils"
+#r "nuget:Z3.Linq"
+
+#!markdown
+
+Import the required namespaces:
 
 #!csharp
 
 using System;
 using System.Diagnostics;
 using System.Globalization;
-using Microsoft.Z3;
 
 using Z3.Linq;
 using Z3.Linq.Examples;
