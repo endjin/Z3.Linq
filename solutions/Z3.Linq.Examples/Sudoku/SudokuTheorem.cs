@@ -45,9 +45,7 @@ public static class SudokuTheorem
         BinaryExpression cellGreaterThanOrEqual1 = Expression.GreaterThanOrEqual(cell, one);
         BinaryExpression cellLessThanOrEqual9 = Expression.LessThanOrEqual(cell, nine);
 
-        var expr = Expression.Lambda<System.Func<SudokuTable, bool>>(
-            Expression.And(cellGreaterThanOrEqual1, cellLessThanOrEqual9),
-            new[] { tParam });
+        var expr = Expression.Lambda<System.Func<SudokuTable, bool>>(Expression.And(cellGreaterThanOrEqual1, cellLessThanOrEqual9), new[] { tParam });
 
         return expr;
     }
@@ -82,9 +80,7 @@ public static class SudokuTheorem
             }
         }
 
-        var expr = Expression.Lambda<System.Func<SudokuTable, bool>>(
-            distincts!,
-            new[] { tParam });
+        var expr = Expression.Lambda<System.Func<SudokuTable, bool>>(distincts!, new[] { tParam });
 
         return expr;
     }
