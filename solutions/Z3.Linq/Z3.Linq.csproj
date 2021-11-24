@@ -9,11 +9,12 @@
   </PropertyGroup>
   
   <PropertyGroup>
+	<Authors>Bart De Smet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
 	<PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
     <RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
     <PackageTags>Z3; LINQ; Solver; SMT</PackageTags>
-    <Description>LINQ bindings for Z3, a satisfiability modulo theories solver from Microsoft Research.</Description>
+    <Description>LINQ bindings for Z3, a satisfiability modulo theories solver from Microsoft Research. Based on a proof of concept from Bart De Smet.</Description>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 

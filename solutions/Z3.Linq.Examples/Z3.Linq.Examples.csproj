@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net6.0</TargetFramework>
@@ -9,6 +9,7 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
+		<Authors>Bart De Smet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
