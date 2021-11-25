@@ -103,7 +103,7 @@ Then you can copy any of the above samples.
 ### For Visual Studio
 
 Add the `Z3.Linq` package.
-Configure your application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3.x64](https://www.nuget.org/packages/Microsoft.Z3.x64/) package.
+Configure your application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3](https://www.nuget.org/packages/Microsoft.Z3/) package.
 
 ## Contributing
 
