@@ -1,6 +1,6 @@
 # Z3.Linq
 
-.NET 6.0 LINQ bindings for the [Z3 theorem prover](https://github.com/Z3Prover/z3) from [Microsoft Research](https://www.microsoft.com/en-us/research/).
+.NET 6.0 LINQ bindings for the [Z3 theorem prover](https://github.com/Z3Prover/z3) from [Microsoft Research](https://www.microsoft.com/en-us/research/). Bsed on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) which was curated into [Z3.LinqBinding](https://github.com/RicardoNiepel/Z3.LinqBinding) by [Ricardo Niepel](https://github.com/RicardoNiepel).
 
 ## Examples
 
@@ -119,7 +119,7 @@ All PRs are welcome.
 
 ## History
 
-2009: Bart De Smet describes a prototype LINQ to Z3 binding in three blog posts:
+2009: [Bart De Smet](https://github.com/bartdesmet) describes a prototype LINQ to Z3 binding in three blog posts:
 
 * [LINQ to Z3 - Part 1 – Exploring The Z3 Theorem Prover](docs/blogs/part-01-exploring-the-z3-theorem-prover.md)
 * [LINQ to Z3 - Part 2 – LINQ to the Unexpected](docs/blogs/part-02-linq-to-the-unexpected.md)
