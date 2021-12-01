@@ -349,5 +349,5 @@ using (var ctx = new Z3Context())
 
     var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz));
 
-    Console.WriteLine($"Saudia Arabia: {result.sa} barrels ({(result.sa * 20).ToString("C", CultureInfo.CreateSpecificCulture("en-US"))}), Venezuela: {result.vz} barrels ({(result.vz * 15).ToString("C", CultureInfo.CreateSpecificCulture("en-US"))})");
+    Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
 }

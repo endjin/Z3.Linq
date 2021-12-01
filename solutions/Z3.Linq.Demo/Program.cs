@@ -2,7 +2,7 @@
 
 using System;
 using System.Diagnostics;
-
+using System.Globalization;
 using Z3.Linq;
 using Z3.Linq.Examples;
 using Z3.Linq.Examples.RiverCrossing;
@@ -181,7 +181,7 @@ public static class Program
 
             var result = theorem.Optimize(Optimization.Minimize, t => 20.0 * t.sa + 15.0 * t.vz);
 
-            Console.WriteLine(result);
+            Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
         }
 
         AllSamples();
