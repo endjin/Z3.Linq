@@ -38,6 +38,18 @@ public static class Program
             Console.WriteLine(minimal);
             Console.WriteLine($"Time to optimized solution: {sw.Elapsed.TotalMilliseconds} ms");
             Console.WriteLine();
+
+             Console.WriteLine("==== Missionaries & Cannibals using orderby clause ====");
+
+            sw = Stopwatch.StartNew();
+            minimal = from t in theorem
+                      orderby t.Length
+                      select t;
+            sw.Stop();
+
+            Console.WriteLine(minimal);
+            Console.WriteLine($"Time to optimized solution: {sw.Elapsed.TotalMilliseconds} ms");
+            Console.WriteLine();
         }
 
         Console.WriteLine("==== t.x ^ t.y using Anonymous Types ====");
@@ -171,15 +183,14 @@ public static class Program
 
         using (var ctx = new Z3Context())
         {
-            var theorem = from t in ctx.NewTheorem<(double vz, double sa)>()
-                          where 0.3 * t.sa + 0.4 * t.vz >= 1900
-                          where 0.4 * t.sa + 0.2 * t.vz >= 1500
-                          where 0.2 * t.sa + 0.3 * t.vz >= 500
-                          where 0 <= t.sa && t.sa <= 9000
-                          where 0 <= t.vz && t.vz <= 6000
-                          select t;
-
-            var result = theorem.Optimize(Optimization.Minimize, t => 20.0 * t.sa + 15.0 * t.vz);
+            var result = from t in ctx.NewTheorem<(double vz, double sa)>()
+                         where 0.3 * t.sa + 0.4 * t.vz >= 1900
+                         where 0.4 * t.sa + 0.2 * t.vz >= 1500
+                         where 0.2 * t.sa + 0.3 * t.vz >= 500
+                         where 0 <= t.sa && t.sa <= 9000
+                         where 0 <= t.vz && t.vz <= 6000
+                         orderby 20.0 * t.sa + 15.0 * t.vz
+                         select t;
 
             Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
         }

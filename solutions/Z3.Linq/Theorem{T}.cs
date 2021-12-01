@@ -40,8 +40,10 @@ public class Theorem<T> : Theorem
     }
 
     /// <summary>
-    /// Solves the theorem.
+    /// Finds an optimal solution.
     /// </summary>
+    /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
+    /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
     /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
     public T Optimize<TResult>(Optimization direction, Expression<Func<T, TResult>> lambda)
     {
@@ -57,4 +59,18 @@ public class Theorem<T> : Theorem
     {
         return new Theorem<T>(base.Context, base.Constraints.Concat(new List<LambdaExpression> { constraint }));
     }
+
+    /// <summary>
+    /// OrderBy query operator, used to optimize a solution using query expression syntax.
+    /// </summary>
+    /// <param name="lambda">Expression representing the value to minimize.</param>
+    /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
+    public T OrderBy<TResult>(Expression<Func<T, TResult>> lambda) => Optimize(Optimization.Minimize, lambda);
+
+    /// <summary>
+    /// OrderBy query operator, used to optimize a solution using query expression syntax.
+    /// </summary>
+    /// <param name="lambda">Expression representing the value to maximize.</param>
+    /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
+    public T OrderByDescending<TResult>(Expression<Func<T, TResult>> lambda) => Optimize(Optimization.Maximize, lambda);
 }
