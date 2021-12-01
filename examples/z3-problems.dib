@@ -1,9 +1,5 @@
 #!markdown
 
-This sample currently requires [VS Code Insiders](https://code.visualstudio.com/insiders/) (and the preview version of the [.NET Interactive extension](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.dotnet-interactive-vscode))
-
-#!markdown
-
 If you want to run this locally, you need to build the solution in Debug mode and then reference the binaries:
 
 #!csharp
