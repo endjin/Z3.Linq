@@ -6,7 +6,7 @@ Based on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) w
 
 ## Examples
 
-A number of examples are included in this solution, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires Visual Studio Code (https://code.visualstudio.com/) or [from Visual Studio](solutions/Z3.Linq.Demo/Program.cs).
+A number of examples are included in this solution, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires [Visual Studio Code](https://code.visualstudio.com/)) or [from Visual Studio](solutions/Z3.Linq.Demo/Program.cs).
 
 ### Problem - 1st Order Propositional Logic
 
