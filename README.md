@@ -75,10 +75,11 @@ using (var ctx = new Z3Context())
                   where 0.2 * t.sa + 0.3 * t.vz >= 500  // Lubricant
                   where 0 <= t.sa && t.sa <= 9000 // Max # barrels we can purchase
                   where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
+                  orderby (20.0 * t.sa) + (15.0 * t.vz) // Optimize for cost
                   select t;
 
-    var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz)); // Optimize for cost
-
+    var result = theorem.Solve();
+    
     Console.WriteLine($"SA: {result.sa} barrels (${result.sa * 20}), VZ: {result.vz} barrels (${result.vz * 15})");
 }
 ```
@@ -97,7 +98,6 @@ Then add the following using statements:
 
 ```csharp
 using System;
-using Microsoft.Z3;
 using Z3.Linq;
 ```
 Then you can copy any of the above samples.
