@@ -9,7 +9,7 @@ using System.Linq.Expressions;
 /// Strongly-typed theorem type for use with LINQ syntax.
 /// </summary>
 /// <typeparam name="T">Environment type over which the theorem is defined.</typeparam>
-public class Theorem<T> : Theorem
+public class Theorem<T> : Theorem, ISolveable<T>
 {
     /// <summary>
     /// Creates a new theorem for the given Z3 context.
@@ -65,12 +65,26 @@ public class Theorem<T> : Theorem
     /// </summary>
     /// <param name="lambda">Expression representing the value to minimize.</param>
     /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
-    public T OrderBy<TResult>(Expression<Func<T, TResult>> lambda) => Optimize(Optimization.Minimize, lambda);
+    public ISolveable<T> OrderBy<TResult>(Expression<Func<T, TResult>> lambda)
+        => new DeferredSolvable(() => Optimize(Optimization.Minimize, lambda));
 
     /// <summary>
     /// OrderBy query operator, used to optimize a solution using query expression syntax.
     /// </summary>
     /// <param name="lambda">Expression representing the value to maximize.</param>
     /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
-    public T OrderByDescending<TResult>(Expression<Func<T, TResult>> lambda) => Optimize(Optimization.Maximize, lambda);
+    public ISolveable<T> OrderByDescending<TResult>(Expression<Func<T, TResult>> lambda)
+        => new DeferredSolvable(() => Optimize(Optimization.Maximize, lambda));
+
+    private class DeferredSolvable : ISolveable<T>
+    {
+        private readonly Func<T> solve;
+
+        public DeferredSolvable(Func<T> solve)
+        {
+            this.solve = solve;
+        }
+
+        public T? Solve() => this.solve();
+    }
 }

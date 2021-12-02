@@ -42,9 +42,9 @@ public static class Program
              Console.WriteLine("==== Missionaries & Cannibals using orderby clause ====");
 
             sw = Stopwatch.StartNew();
-            minimal = from t in theorem
-                      orderby t.Length
-                      select t;
+            minimal = (from t in theorem
+                       orderby t.Length
+                       select t).Solve();
             sw.Stop();
 
             Console.WriteLine(minimal);
@@ -183,7 +183,7 @@ public static class Program
 
         using (var ctx = new Z3Context())
         {
-            var result = from t in ctx.NewTheorem<(double vz, double sa)>()
+            var solveable = from t in ctx.NewTheorem<(double vz, double sa)>()
                          where 0.3 * t.sa + 0.4 * t.vz >= 1900
                          where 0.4 * t.sa + 0.2 * t.vz >= 1500
                          where 0.2 * t.sa + 0.3 * t.vz >= 500
@@ -191,6 +191,8 @@ public static class Program
                          where 0 <= t.vz && t.vz <= 6000
                          orderby 20.0 * t.sa + 15.0 * t.vz
                          select t;
+
+            var result = solveable.Solve();
 
             Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
         }
