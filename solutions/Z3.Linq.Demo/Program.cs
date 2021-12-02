@@ -39,7 +39,7 @@ public static class Program
             Console.WriteLine($"Time to optimized solution: {sw.Elapsed.TotalMilliseconds} ms");
             Console.WriteLine();
 
-             Console.WriteLine("==== Missionaries & Cannibals using orderby clause ====");
+            Console.WriteLine("==== Missionaries & Cannibals using orderby clause ====");
 
             sw = Stopwatch.StartNew();
             minimal = (from t in theorem

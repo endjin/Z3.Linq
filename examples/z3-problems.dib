@@ -4,8 +4,9 @@ If you want to run this locally, you need to build the solution in Debug mode an
 
 #!csharp
 
-#r "Z3.Linq\bin\Debug\net6.0\Z3.Linq.dll"
-#r "Z3.Linq.Examples\bin\Debug\net6.0\Z3.Linq.Examples.dll"
+#r "..\solutions\Z3.Linq\bin\Debug\net6.0\Z3.Linq.dll"
+#r "..\solutions\Z3.Linq.Examples\bin\Debug\net6.0\Z3.Linq.Examples.dll"
+#r "nuget:Microsoft.Z3,*-*"
 
 #!markdown
 
@@ -303,9 +304,10 @@ using (var ctx = new Z3Context())
     var theorem = from t in  MissionariesAndCannibals.Create(ctx, 50)
                   where t.MissionaryAndCannibalCount == 3
                   where t.SizeBoat == 2
+                  orderby t.Length
                   select t;
  
-    var result = theorem.Optimize(Optimization.Minimize, t => t.Length);
+    var result = theorem.Solve();
 
     Console.WriteLine(result);
 }
@@ -345,9 +347,10 @@ using (var ctx = new Z3Context())
                   where 0.2 * t.sa + 0.3 * t.vz >= 500  // Lubricant
                   where 0 <= t.sa && t.sa <= 9000 // Max # barrels we can purchase
                   where 0 <= t.vz && t.vz <= 6000 // Max # barrels we can purchase
+                  orderby (20.0 * t.sa) + (15.0 * t.vz)
                   select t;
 
-    var result = theorem.Optimize(Optimization.Minimize, t => (20.0 * t.sa) + (15.0 * t.vz));
+    var result = theorem.Solve();
 
     Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
 }
