@@ -436,7 +436,16 @@ public class Theorem
                 value = Double.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
                 break;
             case TypeCode.Decimal:
-                value = Decimal.Parse(((RatNum)val).ToDecimalString(128), CultureInfo.InvariantCulture);
+
+                string decValue = ((RatNum) val).ToDecimalString(128);
+
+                ReadOnlySpan<char> decValueSpan = decValue.AsSpan();
+                if (decValue.EndsWith('?'))
+                {
+                    decValueSpan = decValueSpan[..^1];
+                }
+
+                value = Decimal.Parse(decValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
                 break;
             case TypeCode.Double:
                 value = Double.Parse(((RatNum)val).ToDecimalString(64), CultureInfo.InvariantCulture);
