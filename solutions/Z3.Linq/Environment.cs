@@ -10,7 +10,7 @@ public class Environment
 {
     public Expr? Expr { get; set; }
 
-    public Boolean IsArray { get; set; }
+    public bool IsArray { get; set; }
         
     public Dictionary<MemberInfo, Environment> Properties { get; private set; } = new Dictionary<MemberInfo, Environment>();
 }

@@ -433,7 +433,7 @@ public class Theorem
                 value = val.IsTrue;
                 break;
             case TypeCode.Single:
-                value = Double.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
+                value = double.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
                 break;
             case TypeCode.Decimal:
 
@@ -445,10 +445,10 @@ public class Theorem
                     decValueSpan = decValueSpan[..^1];
                 }
 
-                value = Decimal.Parse(decValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
+                value = decimal.Parse(decValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
                 break;
             case TypeCode.Double:
-                value = Double.Parse(((RatNum)val).ToDecimalString(64), CultureInfo.InvariantCulture);
+                value = double.Parse(((RatNum)val).ToDecimalString(64), CultureInfo.InvariantCulture);
                 break;
             case TypeCode.Object:
                 if (parameterType.IsArray || (parameterType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(parameterType.GetGenericTypeDefinition())))
@@ -498,13 +498,21 @@ public class Theorem
                                 numVal = numValExpr.IsTrue;
                                 break;
                             case TypeCode.Single:
-                                numVal = Double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
+                                numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
                                 break;
                             case TypeCode.Decimal:
-                                numVal = Decimal.Parse(((RatNum)numValExpr).ToDecimalString(128), CultureInfo.InvariantCulture);
+                                string numValue = ((RatNum)val).ToDecimalString(128);
+
+                                ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
+                                if (numValue.EndsWith('?'))
+                                {
+                                    numValueSpan = numValueSpan[..^1];
+                                }
+
+                                numVal = decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
                                 break;
                             case TypeCode.Double:
-                                numVal = Double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
+                                numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
                                 break;
                             default:
                                 throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
