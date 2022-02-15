@@ -13,37 +13,8 @@ public static class Program
 {
     private static void Main(string[] args)
     {
-        // Big value tuple - this is an interesting case because the tuple doesn't quite fit
-        // inside a ValueTuple so C# ends up using ValueTuple<double, double, double, double, double, double, double, ValueTuple<double>>
-        using (var ctx = new Z3Context())
-        {
-            var theorem =
-                from t in ctx.NewTheorem<(double w1c1, double w1c2, double w1c3, double w1c4, double w2c1, double w2c2, double w2c3, double w2c4)>()
-                where t.w1c1 + t.w1c2 + t.w1c3 + t.w1c4 <= 60000 // Warehouse 1
-                where t.w2c1 + t.w2c2 + t.w2c3 + t.w2c4 <= 80000 // Warehouse 2
-                where t.w1c1 + t.w2c1 == 35000  // Customer 1
-                where t.w1c2 + t.w2c2 == 22000 // Customer 2
-                where t.w1c3 + t.w2c3 == 18000 // Customer 3
-                where t.w1c4 + t.w2c4 == 30000 // Customer 3
-                where t.w1c1 >= 0
-                where t.w1c2 >= 0
-                where t.w1c3 >= 0
-                where t.w1c4 >= 0
-                where t.w2c1 >= 0
-                where t.w2c2 >= 0
-                where t.w2c3 >= 0
-                where t.w2c4 >= 0
-                orderby 1 * t.w1c1 + 3 * t.w1c2 + 0.5 * t.w1c3 + 4 * t.w1c4 + 2.5 * t.w2c1 + 5 * t.w2c2 + 1.5 * t.w2c3 + 2.5 * t.w2c4 // Total shipping cost
-                select t;
-
-            var result = theorem.Solve();
-
-            Console.WriteLine(result);
-            Console.WriteLine(1 * result.w1c1 + 3 * result.w1c2 + 0.5 * result.w1c3 + 4 * result.w1c4 + 2.5 * result.w2c1 + 5 * result.w2c2 + 1.5 * result.w2c3 + 2.5 * result.w2c4);
-        }
-
-
         Console.WriteLine("==== Missionaries & Cannibals using Solve() ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -61,6 +32,7 @@ public static class Program
             Console.WriteLine();
 
             Console.WriteLine("==== Missionaries & Cannibals using Optimize() ====");
+            Console.WriteLine();
 
             sw = Stopwatch.StartNew();
             var minimal = theorem.Optimize(Optimization.Minimize, t => t.Length);
@@ -71,6 +43,7 @@ public static class Program
             Console.WriteLine();
 
             Console.WriteLine("==== Missionaries & Cannibals using orderby clause ====");
+            Console.WriteLine();
 
             sw = Stopwatch.StartNew();
             minimal = (from t in theorem
@@ -80,10 +53,11 @@ public static class Program
 
             Console.WriteLine(minimal);
             Console.WriteLine($"Time to optimized solution: {sw.Elapsed.TotalMilliseconds} ms");
-            Console.WriteLine();
         }
 
+        Console.WriteLine();
         Console.WriteLine("==== t.x ^ t.y using Anonymous Types ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -96,7 +70,9 @@ public static class Program
             Console.WriteLine(result);
         }
 
+        Console.WriteLine();
         Console.WriteLine("==== t.x ^ t.y using ValueTuples ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -110,7 +86,9 @@ public static class Program
             ctx.Dispose();
         }
 
+        Console.WriteLine();
         Console.WriteLine("==== t.x ^ t.y using Custom Theorem using Record type ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -123,7 +101,9 @@ public static class Program
             Console.WriteLine(result);
         }
 
+        Console.WriteLine();
         Console.WriteLine("==== Bart's example from TechEd Europe 2012 ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -138,7 +118,9 @@ public static class Program
             Console.WriteLine(result);
         }
 
+        Console.WriteLine();
         Console.WriteLine("==== Bart's example from TechEd Europe 2012 using ValueTuples ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -153,7 +135,9 @@ public static class Program
             Console.WriteLine(result);
         }
 
+        Console.WriteLine();
         Console.WriteLine("====  Example using Symbols<T1, T2> ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -168,7 +152,9 @@ public static class Program
             Console.WriteLine(result);
         }
 
+        Console.WriteLine();
         Console.WriteLine("====  SudokuTheorem Example ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -190,6 +176,7 @@ public static class Program
         }
 
         Console.WriteLine("====  SudokuTheorem Example from https://sandiway.arizona.edu/sudoku/examples.html ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -211,6 +198,7 @@ public static class Program
         }
 
         Console.WriteLine("====  Oil Purchase Problem. ====");
+        Console.WriteLine();
 
         using (var ctx = new Z3Context())
         {
@@ -228,12 +216,40 @@ public static class Program
             Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
         }
 
-        AllSamples();
+        Console.WriteLine();
+        Console.WriteLine("====  Warehouse Logistics Problem ====");
+        Console.WriteLine();
+
+        using (var ctx = new Z3Context())
+        {
+            var theorem =
+                from t in ctx.NewTheorem<(double w1c1, double w1c2, double w1c3, double w1c4, double w2c1, double w2c2, double w2c3, double w2c4)>()
+                where t.w1c1 + t.w1c2 + t.w1c3 + t.w1c4 <= 60_000 // Warehouse 1 Product Availability
+                where t.w2c1 + t.w2c2 + t.w2c3 + t.w2c4 <= 80_000 // Warehouse 2 Product Availability
+                where t.w1c1 + t.w2c1 == 35_000 && (t.w1c1 >= 0 && t.w2c1 >= 0) // Customer 1 Orders
+                where t.w1c2 + t.w2c2 == 22_000 && (t.w1c2 >= 0 && t.w2c2 >= 0) // Customer 2 Orders
+                where t.w1c3 + t.w2c3 == 18_000 && (t.w1c3 >= 0 && t.w2c3 >= 0) // Customer 3 Orders
+                where t.w1c4 + t.w2c4 == 30_000 && (t.w1c4 >= 0 && t.w2c4 >= 0) // Customer 4 Orders
+                orderby (1.00 * t.w1c1) + (3.00 * t.w1c2) + (0.50 * t.w1c3) + (4.00 * t.w1c4) +
+                        (2.50 * t.w2c1) + (5.00 * t.w2c2) + (1.50 * t.w2c3) + (2.50 * t.w2c4) // Optimize for Total Shipping Cost
+                select t;
+
+            var result = theorem.Solve();
+
+            Console.WriteLine($"|                     | Customer 1 | Customer 2  | Customer 3 | Customer 4 |");
+            Console.WriteLine($"|---------------------|------------|-------------|------------|------------|");
+            Console.WriteLine($"| Warehouse 1         | {result.w1c1}      | {result.w1c2}       |  {result.w1c3}      | {result.w1c4}          |");
+            Console.WriteLine($"| Warehouse 2         | {result.w2c1}          | {result.w2c2}           | {result.w2c3}      | {result.w2c4}      |");
+            Console.WriteLine();
+            Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Total Cost: {1 * result.w1c1 + 3 * result.w1c2 + 0.5 * result.w1c3 + 4 * result.w1c4 + 2.5 * result.w2c1 + 5 * result.w2c2 + 1.5 * result.w2c3 + 2.5 * result.w2c4:C}"));
+        }
+
+        // AllSamplesWithLogging();
 
         Console.ReadKey();
     }
 
-    private static void AllSamples()
+    private static void AllSamplesWithLogging()
     {
         using (var ctx = new Z3Context())
         {
