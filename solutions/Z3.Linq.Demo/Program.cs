@@ -241,7 +241,7 @@ public static class Program
             Console.WriteLine($"| Warehouse 1         | {result.w1c1}      | {result.w1c2}       |  {result.w1c3}      | {result.w1c4}          |");
             Console.WriteLine($"| Warehouse 2         | {result.w2c1}          | {result.w2c2}           | {result.w2c3}      | {result.w2c4}      |");
             Console.WriteLine();
-            Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Total Cost: {1 * result.w1c1 + 3 * result.w1c2 + 0.5 * result.w1c3 + 4 * result.w1c4 + 2.5 * result.w2c1 + 5 * result.w2c2 + 1.5 * result.w2c3 + 2.5 * result.w2c4:C}"));
+            Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Total Cost: {1.00 * result.w1c1 + 3.00 * result.w1c2 + 0.50 * result.w1c3 + 4.00 * result.w1c4 + 2.50 * result.w2c1 + 5.00 * result.w2c2 + 1.50 * result.w2c3 + 2.50 * result.w2c4:C}"));
         }
 
         // AllSamplesWithLogging();
