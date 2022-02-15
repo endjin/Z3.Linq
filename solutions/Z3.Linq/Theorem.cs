@@ -312,29 +312,35 @@ public class Theorem
         Expr constrExp;
         if (!isArray)
         {
+            // To deal correctly with nested properties, we can't just use the property name.
+            // That breaks with ValueTuples with arity of 8 or higher because those have
+            // both x.Item1 and x.Rest.Item1, and if we call both of those "Item1" they become
+            // indistinguishable. Using the prefix means those become ValueTuple`8_Item1 and
+            // ValueTuple`8_Rest_Item1.
+            string name = prefix;
             switch (Type.GetTypeCode(parameterType))
             {
                 case TypeCode.String:
-                    constrExp = context.MkConst(parameter.Name, context.StringSort);
+                    constrExp = context.MkConst(name, context.StringSort);
                     break;
                 case TypeCode.Int16:
                 case TypeCode.Int32:
                 case TypeCode.Int64:
                 case TypeCode.DateTime:
-                    constrExp = context.MkIntConst(parameter.Name);
+                    constrExp = context.MkIntConst(name);
                     break;
                 case TypeCode.Boolean:
-                    constrExp = context.MkBoolConst(parameter.Name);
+                    constrExp = context.MkBoolConst(name);
                     break;
                 case TypeCode.Single:
                 case TypeCode.Decimal:
                 case TypeCode.Double:
-                    constrExp = context.MkRealConst(parameter.Name);
+                    constrExp = context.MkRealConst(name);
                     break;
                 case TypeCode.Object:
                     return GetEnvironment(context, parameterType, prefix);
                 default:
-                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ".");
+                    throw new NotSupportedException("Unsupported parameter type for " + name + ".");
             }
         }
         else
@@ -390,10 +396,6 @@ public class Theorem
 
     private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter)
     {
-        Expr subEnvExpr = subEnv.Expr ?? throw new ArgumentException(
-            $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
-            nameof(subEnv));
-            
         // Normalize types when facing Z3. Theorem variable type mappings allow for strong
         // typing within the theorem, while underlying variable representations are Z3-
         // friendly types.
@@ -411,125 +413,140 @@ public class Theorem
             parameterType = parameterTypeMapping.RegularType;
         }
 
-        Expr val = model.Eval(subEnvExpr);
-
         object value;
-        switch (Type.GetTypeCode(parameterType))
+        TypeCode typeCode = Type.GetTypeCode(parameterType);
+        if (typeCode == TypeCode.Object)
         {
-            case TypeCode.String:
-                value = val.String;
-                break;
-            case TypeCode.Int16:
-            case TypeCode.Int32:
-                value = ((IntNum)val).Int;
-                break;
-            case TypeCode.Int64:
-                value = ((IntNum)val).Int64;
-                break;
-            case TypeCode.DateTime:
-                value = DateTime.FromFileTime(((IntNum)val).Int64);
-                break;
-            case TypeCode.Boolean:
-                value = val.IsTrue;
-                break;
-            case TypeCode.Single:
-                value = double.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
-                break;
-            case TypeCode.Decimal:
+            if (parameterType.IsArray || (parameterType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(parameterType.GetGenericTypeDefinition())))
+            {
+                Type eltType = parameterType.IsArray ? parameterType.GetElementType()! : parameterType.GetGenericArguments()[0];
 
-                string decValue = ((RatNum) val).ToDecimalString(128);
-
-                ReadOnlySpan<char> decValueSpan = decValue.AsSpan();
-                if (decValue.EndsWith('?'))
+                if (eltType == null)
                 {
-                    decValueSpan = decValueSpan[..^1];
+                    throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
                 }
 
-                value = decimal.Parse(decValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
-                break;
-            case TypeCode.Double:
-                value = double.Parse(((RatNum)val).ToDecimalString(64), CultureInfo.InvariantCulture);
-                break;
-            case TypeCode.Object:
-                if (parameterType.IsArray || (parameterType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(parameterType.GetGenericTypeDefinition())))
+                var arrVal = (ArrayExpr)(subEnv.Expr ?? throw new ArgumentException(
+                    $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
+                    nameof(subEnv)));
+
+                var results = new ArrayList();
+
+                //todo: deal with length in a more robust way
+
+                int existingLength = parameter switch
                 {
-                    Type  eltType = parameterType.IsArray ? parameterType.GetElementType()! : parameterType.GetGenericArguments()[0];
-                        
-                    if (eltType == null)
+                    PropertyInfo info => ((ICollection)info.GetValue(destinationObject, null)!).Count,
+                    FieldInfo info1 => ((ICollection)info1).Count,
+                    _ => 0
+                };
+
+                for (int i = 0; i < existingLength; i++)
+                {
+                    var numValExpr = model.Eval(context.MkSelect(arrVal, context.MkInt(i)));
+
+                    object numVal;
+
+                    switch (Type.GetTypeCode(eltType))
                     {
-                        throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
+                        case TypeCode.String:
+                            numVal = numValExpr.String;
+                            break;
+                        case TypeCode.Int16:
+                        case TypeCode.Int32:
+                            numVal = ((IntNum)numValExpr).Int;
+                            break;
+                        case TypeCode.Int64:
+                            numVal = ((IntNum)numValExpr).Int64;
+                            break;
+                        case TypeCode.DateTime:
+                            numVal = DateTime.FromFileTime(((IntNum)numValExpr).Int64);
+                            break;
+                        case TypeCode.Boolean:
+                            numVal = numValExpr.IsTrue;
+                            break;
+                        case TypeCode.Single:
+                            numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
+                            break;
+                        case TypeCode.Decimal:
+                            Expr val = model.Eval((subEnv.Expr ?? throw new ArgumentException(
+                    $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
+                    nameof(subEnv))));
+                            string numValue = ((RatNum)val).ToDecimalString(128);
+
+                            ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
+                            if (numValue.EndsWith('?'))
+                            {
+                                numValueSpan = numValueSpan[..^1];
+                            }
+
+                            numVal = decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
+                            break;
+                        case TypeCode.Double:
+                            numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
+                            break;
+                        default:
+                            throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
                     }
 
-                    var arrVal = (ArrayExpr)subEnv.Expr;
+                    results.Add(numVal);
+                }
 
-                    var results = new ArrayList();
+                value = parameterType.IsArray ? results.ToArray(eltType) : Activator.CreateInstance(parameterType, results.ToArray(eltType))!;
+            }
+            else
+            {
+                value = GetSolution(parameterType, context, model, subEnv);
+            }
+        }
+        else
+        {
+            Expr subEnvExpr = subEnv.Expr ?? throw new ArgumentException(
+                $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
+                nameof(subEnv));
 
-                    //todo: deal with length in a more robust way
+            Expr val = model.Eval(subEnvExpr);
 
-                    int existingLength = parameter switch
+            switch (typeCode)
+            {
+                case TypeCode.String:
+                    value = val.String;
+                    break;
+                case TypeCode.Int16:
+                case TypeCode.Int32:
+                    value = ((IntNum)val).Int;
+                    break;
+                case TypeCode.Int64:
+                    value = ((IntNum)val).Int64;
+                    break;
+                case TypeCode.DateTime:
+                    value = DateTime.FromFileTime(((IntNum)val).Int64);
+                    break;
+                case TypeCode.Boolean:
+                    value = val.IsTrue;
+                    break;
+                case TypeCode.Single:
+                    value = double.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
+                    break;
+                case TypeCode.Decimal:
+
+                    string decValue = ((RatNum)val).ToDecimalString(128);
+
+                    ReadOnlySpan<char> decValueSpan = decValue.AsSpan();
+                    if (decValue.EndsWith('?'))
                     {
-                        PropertyInfo info => ((ICollection)info.GetValue(destinationObject, null)!).Count,
-                        FieldInfo info1 => ((ICollection)info1).Count,
-                        _ => 0
-                    };
-
-                    for (int i = 0; i < existingLength; i++)
-                    {
-                        var numValExpr = model.Eval(context.MkSelect(arrVal, context.MkInt(i)));
-
-                        object numVal;
-
-                        switch (Type.GetTypeCode(eltType))
-                        {
-                            case TypeCode.String:
-                                numVal = numValExpr.String;
-                                break;
-                            case TypeCode.Int16:
-                            case TypeCode.Int32:
-                                numVal = ((IntNum)numValExpr).Int;
-                                break;
-                            case TypeCode.Int64:
-                                numVal = ((IntNum)numValExpr).Int64;
-                                break;
-                            case TypeCode.DateTime:
-                                numVal = DateTime.FromFileTime(((IntNum)numValExpr).Int64);
-                                break;
-                            case TypeCode.Boolean:
-                                numVal = numValExpr.IsTrue;
-                                break;
-                            case TypeCode.Single:
-                                numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
-                                break;
-                            case TypeCode.Decimal:
-                                string numValue = ((RatNum)val).ToDecimalString(128);
-
-                                ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
-                                if (numValue.EndsWith('?'))
-                                {
-                                    numValueSpan = numValueSpan[..^1];
-                                }
-
-                                numVal = decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
-                                break;
-                            case TypeCode.Double:
-                                numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
-                                break;
-                            default:
-                                throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
-                        }
-
-                        results.Add(numVal);
+                        decValueSpan = decValueSpan[..^1];
                     }
-                        
-                    value = parameterType.IsArray ? results.ToArray(eltType) : Activator.CreateInstance(parameterType, results.ToArray(eltType))!;
-                }
-                else
-                {
-                    value = GetSolution(parameterType, context, model, subEnv);
-                }
-                break;
-            default:
-                throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ".");
+
+                    value = decimal.Parse(decValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
+                    break;
+                case TypeCode.Double:
+                    value = double.Parse(((RatNum)val).ToDecimalString(64), CultureInfo.InvariantCulture);
+                    break;
+
+                default:
+                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ".");
+            }
         }
 
         // If there was a type mapping, we need to convert back to the original type.
@@ -543,6 +560,17 @@ public class Theorem
                 if (ctor == null)
                 {
                     throw new InvalidOperationException("Could not construct an instance of the mapped type " + propertyInfo.PropertyType.Name + ". No public constructor with parameter type " + parameterType + " found.");
+                }
+
+                value = ctor.Invoke(new object[] { value! });
+            }
+            if (parameter is FieldInfo fieldInfo)
+            {
+                var ctor = fieldInfo.FieldType.GetConstructor(new Type[] { parameterType });
+
+                if (ctor == null)
+                {
+                    throw new InvalidOperationException("Could not construct an instance of the mapped type " + fieldInfo.FieldType.Name + ". No public constructor with parameter type " + parameterType + " found.");
                 }
 
                 value = ctor.Invoke(new object[] { value! });
