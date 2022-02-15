@@ -312,29 +312,35 @@ public class Theorem
         Expr constrExp;
         if (!isArray)
         {
+            // To deal correctly with nested properties, we can't just use the property name.
+            // That breaks with ValueTuples with arity of 8 or higher because those have
+            // both x.Item1 and x.Rest.Item1, and if we call both of those "Item1" they become
+            // indistinguishable. Using the prefix means those become ValueTuple`8_Item1 and
+            // ValueTuple`8_Rest_Item1.
+            string name = prefix;
             switch (Type.GetTypeCode(parameterType))
             {
                 case TypeCode.String:
-                    constrExp = context.MkConst(parameter.Name, context.StringSort);
+                    constrExp = context.MkConst(name, context.StringSort);
                     break;
                 case TypeCode.Int16:
                 case TypeCode.Int32:
                 case TypeCode.Int64:
                 case TypeCode.DateTime:
-                    constrExp = context.MkIntConst(parameter.Name);
+                    constrExp = context.MkIntConst(name);
                     break;
                 case TypeCode.Boolean:
-                    constrExp = context.MkBoolConst(parameter.Name);
+                    constrExp = context.MkBoolConst(name);
                     break;
                 case TypeCode.Single:
                 case TypeCode.Decimal:
                 case TypeCode.Double:
-                    constrExp = context.MkRealConst(parameter.Name);
+                    constrExp = context.MkRealConst(name);
                     break;
                 case TypeCode.Object:
                     return GetEnvironment(context, parameterType, prefix);
                 default:
-                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ".");
+                    throw new NotSupportedException("Unsupported parameter type for " + name + ".");
             }
         }
         else
