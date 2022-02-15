@@ -3,6 +3,7 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
+
 using Z3.Linq;
 using Z3.Linq.Examples;
 using Z3.Linq.Examples.RiverCrossing;
@@ -12,6 +13,36 @@ public static class Program
 {
     private static void Main(string[] args)
     {
+        // Big value tuple - this is an interesting case because the tuple doesn't quite fit
+        // inside a ValueTuple so C# ends up using ValueTuple<double, double, double, double, double, double, double, ValueTuple<double>>
+        using (var ctx = new Z3Context())
+        {
+            var theorem =
+                from t in ctx.NewTheorem<(double w1c1, double w1c2, double w1c3, double w1c4, double w2c1, double w2c2, double w2c3, double w2c4)>()
+                where t.w1c1 + t.w1c2 + t.w1c3 + t.w1c4 <= 60000 // Warehouse 1
+                where t.w2c1 + t.w2c2 + t.w2c3 + t.w2c4 <= 80000 // Warehouse 2
+                where t.w1c1 + t.w2c1 == 35000  // Customer 1
+                where t.w1c2 + t.w2c2 == 22000 // Customer 2
+                where t.w1c3 + t.w2c3 == 18000 // Customer 3
+                where t.w1c4 + t.w2c4 == 30000 // Customer 3
+                where t.w1c1 >= 0
+                where t.w1c2 >= 0
+                where t.w1c3 >= 0
+                where t.w1c4 >= 0
+                where t.w2c1 >= 0
+                where t.w2c2 >= 0
+                where t.w2c3 >= 0
+                where t.w2c4 >= 0
+                orderby 1 * t.w1c1 + 3 * t.w1c2 + 0.5 * t.w1c3 + 4 * t.w1c4 + 2.5 * t.w2c1 + 5 * t.w2c2 + 1.5 * t.w2c3 + 2.5 * t.w2c4 // Total shipping cost
+                select t;
+
+            var result = theorem.Solve();
+
+            Console.WriteLine(result);
+            Console.WriteLine(1 * result.w1c1 + 3 * result.w1c2 + 0.5 * result.w1c3 + 4 * result.w1c4 + 2.5 * result.w2c1 + 5 * result.w2c2 + 1.5 * result.w2c3 + 2.5 * result.w2c4);
+        }
+
+
         Console.WriteLine("==== Missionaries & Cannibals using Solve() ====");
 
         using (var ctx = new Z3Context())
@@ -184,13 +215,13 @@ public static class Program
         using (var ctx = new Z3Context())
         {
             var solveable = from t in ctx.NewTheorem<(double vz, double sa)>()
-                         where 0.3 * t.sa + 0.4 * t.vz >= 1900
-                         where 0.4 * t.sa + 0.2 * t.vz >= 1500
-                         where 0.2 * t.sa + 0.3 * t.vz >= 500
-                         where 0 <= t.sa && t.sa <= 9000
-                         where 0 <= t.vz && t.vz <= 6000
-                         orderby 20.0 * t.sa + 15.0 * t.vz
-                         select t;
+                            where 0.3 * t.sa + 0.4 * t.vz >= 1900
+                            where 0.4 * t.sa + 0.2 * t.vz >= 1500
+                            where 0.2 * t.sa + 0.3 * t.vz >= 500
+                            where 0 <= t.sa && t.sa <= 9000
+                            where 0 <= t.vz && t.vz <= 6000
+                            orderby 20.0 * t.sa + 15.0 * t.vz
+                            select t;
 
             var result = solveable.Solve();
 
