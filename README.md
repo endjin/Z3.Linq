@@ -84,6 +84,55 @@ using (var ctx = new Z3Context())
 }
 ```
 
+### Problem - Minimizing Shipping Costs
+
+In this example, you want to minimize the cost of shipping goods from 2 different warehouses to 4 different customers. Each warehouse has a limited supply and each customer has a certain demand.
+
+Cost of shipping ($ per product):
+|             | Customer 1 | Customer 2 | Customer 3 | Customer 4 |
+|-------------|------------|------------|------------|------------|
+| Warehouse 1 | $1.00      | $3.00      | $0.50      | $4.00      |
+| Warehouse 2 | $2.50      | $5.00      | $1.50      | $2.50      |
+
+Number of products shipped:
+|                     | Customer 1 | Customer 2  | Customer 3 | Customer 4 | Total shipped |    | Available |
+|---------------------|------------|-------------|------------|------------|---------------|----|-----------|
+| Warehouse 1         | 0          | 13,000      | 15,000     | 32,000     | 60,000        | <= | 60,000    |
+| Warehouse 2         | 30,000     | 10,000      | 0          | 0          | 40,000        | <= | 80,000    |
+| Total received      | 30,000     | 23,000      | 15,000     | 32,000     |               |    |           |
+| Ordered             | 35,000     | 22,000      | 18,000     | 30,000     |               |    |           |
+| Total Shipping Cost |            | $299,500.00 |            |            |               |    |           |
+
+1. The objective is to minimize the cost (Total Shipping Cost).
+2. The variables are the number of products to ship from each warehouse to each customer.
+3. The constraints are the number of products ordered and the number of products available in each warehouse.
+
+```csharp
+using (var ctx = new Z3Context())
+{
+    var theorem =
+        from t in ctx.NewTheorem<(double w1c1, double w1c2, double w1c3, double w1c4, double w2c1, double w2c2, double w2c3, double w2c4)>()
+        where t.w1c1 + t.w1c2 + t.w1c3 + t.w1c4 <= 60_000 // Warehouse 1 Product Availability
+        where t.w2c1 + t.w2c2 + t.w2c3 + t.w2c4 <= 80_000 // Warehouse 2 Product Availability
+        where t.w1c1 + t.w2c1 == 35_000 && (t.w1c1 >= 0 && t.w2c1 >= 0) // Customer 1 Orders
+        where t.w1c2 + t.w2c2 == 22_000 && (t.w1c2 >= 0 && t.w2c2 >= 0) // Customer 2 Orders
+        where t.w1c3 + t.w2c3 == 18_000 && (t.w1c3 >= 0 && t.w2c3 >= 0) // Customer 3 Orders
+        where t.w1c4 + t.w2c4 == 30_000 && (t.w1c4 >= 0 && t.w2c4 >= 0) // Customer 4 Orders
+        orderby (1.00 * t.w1c1) + (3.00 * t.w1c2) + (0.50 * t.w1c3) + (4.00 * t.w1c4) +
+                (2.50 * t.w2c1) + (5.00 * t.w2c2) + (1.50 * t.w2c3) + (2.50 * t.w2c4) // Optimize for Total Shipping Cost
+        select t;
+
+    var result = theorem.Solve();
+
+    Console.WriteLine($"|                     | Customer 1 | Customer 2  | Customer 3 | Customer 4 |");
+    Console.WriteLine($"|---------------------|------------|-------------|------------|------------|");
+    Console.WriteLine($"| Warehouse 1         | {result.w1c1}      | {result.w1c2}       |  {result.w1c3}      | {result.w1c4}          |");
+    Console.WriteLine($"| Warehouse 2         | {result.w2c1}          | {result.w2c2}           | {result.w2c3}      | {result.w2c4}      |");
+    Console.WriteLine();
+    Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Total Cost: {1.00 * result.w1c1 + 3.00 * result.w1c2 + 0.50 * result.w1c3 + 4.00 * result.w1c4 + 2.50 * result.w2c1 + 5.00 * result.w2c2 + 1.50 * result.w2c3 + 2.50 * result.w2c4:C}"));
+}
+```
+
 ## Getting Started
 
 You can install the [Z3.Linq NuGet Package](https://www.nuget.org/packages/Z3.Linq/).
