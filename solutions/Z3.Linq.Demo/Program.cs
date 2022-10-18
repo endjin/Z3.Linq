@@ -213,7 +213,7 @@ public static class Program
 
             var result = solveable.Solve();
 
-            Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudia Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
+            Console.WriteLine(string.Create(CultureInfo.CreateSpecificCulture("en-US"), $"Saudi Arabia: {result.sa} barrels ({(result.sa * 20):C}), Venezuela: {result.vz} barrels ({(result.vz * 15):C})"));
         }
 
         Console.WriteLine();
