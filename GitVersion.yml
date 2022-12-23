@@ -3,10 +3,11 @@
 #  https://github.com/endjin/.github/actions/workflows/deploy_pr_autoflow.yml
 # This repository participates in this mechanism due to an entry in this file:
 #  https://github.com/endjin/.github/blob/b69ff1d66541ae049fb0457c65c719c6d7e9b862/repos/live/corvus-dotnet.yml
+
 mode: ContinuousDeployment
 branches:
   master:
-    regex: ^master|main$
+    regex: ^main
     tag: preview
     increment: patch
   dependabot-pr:
@@ -19,8 +20,5 @@ branches:
     - feature
     - support
     - hotfix
-  develop:
-    mode: ContinuousDeployment
-    tag: alpha
-    regex: ^develop/\d\.\d$
-next-version: 1.0
+next-version: "1.0"
+
