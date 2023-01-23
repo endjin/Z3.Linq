@@ -3,7 +3,6 @@ on:
   push:
     branches:
     - main
-    - feature/gha-build-pipeline
   pull_request:
     branches:
     - main
