@@ -350,3 +350,8 @@ MigrationBackup/
 .ionide/
 
 .idea/
+
+# build artefacts
+_codeCoverage/
+_packages/
+*.sbom.*
