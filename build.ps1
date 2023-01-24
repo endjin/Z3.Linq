@@ -164,13 +164,23 @@ task PreVersion {}
 task PostVersion {}
 task PreBuild {}
 task PostBuild {}
-task PreTest {}
+task PreTest {
+    Write-Host "`n*** NuGetDir ***"
+    exec { & ls -la .nuget-packages/ }
+    Write-Host "`n*** ProjectAssets ***"
+    exec { & find . -name "project.assets.json" }
+}
 task PostTest {}
 task PreTestReport {}
 task PostTestReport {}
 task PreAnalysis {}
 task PostAnalysis {}
-task PrePackage {}
+task PrePackage {
+    Write-Host "`n*** NuGetDir ***"
+    exec { & ls -la .nuget-packages/ }
+    Write-Host "`n*** ProjectAssets ***"
+    exec { & find . -name "project.assets.json" }
+}
 task PostPackage {}
 task PrePublish {}
 task PostPublish {}
