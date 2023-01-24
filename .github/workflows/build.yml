@@ -1,51 +1,33 @@
 name: build
 on:
-- push
-- workflow_dispatch
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+  workflow_dispatch:
+    inputs:
+      forcePublish:
+        description: When true the Publish stage will always be run, otherwise it only runs for tagged versions.
+        required: false
+        default: false
+        type: boolean
+      skipCleanup:
+        description: When true the pipeline clean-up stage will not be run. For example, the cache used between pipeline stages will be retained.
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    name: Run Build
-    outputs:
-      semver: ${{ steps.run_build.outputs.SemVer }}
-      major: ${{ steps.run_build.outputs.Major }}
-      majorMinor: ${{ steps.run_build.outputs.Major }}.${{ steps.run_build.outputs.Minor }}
-      preReleaseTag: ${{ steps.run_build.outputs.PreReleaseTag }}
-    steps:
-    # Setup steps
-    - uses: actions/setup-dotnet@v1
-      if: ${{ github.actor != 'nektos/act' }}
-      name: Install .NET Core SDK 6.0.x
-      with:
-        dotnet-version: '6.0.x'
-    - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1.0.5
-
-    # Build steps
-    - uses: actions/checkout@v2
-      with:
-          fetch-depth: 0
-    - id: run_build
-      run: |
-        pwsh -f ./build.ps1
-      env:
-        CONTENT_DEV_AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.CONTENT_DEV_AZURE_STORAGE_CONNECTION_STRING }}
-
-    # Publishing steps
-    - name: Publish to GitHub Packages
-      run: |
-        dotnet tool install -g gpr
-        gci _packages/
-        gpr push --repository $env:GITHUB_REPOSITORY --api-key $env:GITHUB_TOKEN "_packages/*.nupkg"
-      shell: pwsh
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Publish to NuGet.org
-      if: ${{ startsWith(github.event.ref, 'refs/tags/') }}
-      run: |
-        nuget push "_packages/**/*.nupkg" -Source "https://api.nuget.org/v3/index.json" -ApiKey $env:NUGET_APIKEY
-      shell: pwsh
-      env:
-        NUGET_APIKEY: ${{ secrets.ENDJIN_NUGET_APIKEY }}
+    uses: endjin/Endjin.RecommendedPractices.GitHubActions/.github/workflows/scripted-build-pipeline.yml@main
+    with:
+      netSdkVersion: '6.0.x'
+      # workflow_dispatch inputs are always strings, the type property is just for the UI
+      forcePublish: ${{ github.event.inputs.forcePublish == 'true' }}
+      skipCleanup: ${{ github.event.inputs.skipCleanup == 'true' }}
