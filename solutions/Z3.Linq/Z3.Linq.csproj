@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="MiaPlaza.ExpressionUtils" Version="1.2.0" />
-    <PackageReference Include="Microsoft.Z3" Version="4.8.12" />
+    <PackageReference Include="Microsoft.Z3" Version="4.12.2" />
   </ItemGroup>
 
 </Project>
