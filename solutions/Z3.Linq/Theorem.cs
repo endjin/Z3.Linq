@@ -10,7 +10,6 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
 
 /// <summary>
 /// Representation of a theorem with its constraints.
@@ -612,7 +611,7 @@ public class Theorem
             // However, we don't know the order and it's hard to correlate back the parameters
             // to the underlying properties. So, we want to bypass that constructor altogether
             // by using the FormatterServices to create an uninitialized (all-zero) instance.
-            object result = FormatterServices.GetUninitializedObject(t);
+            object result = RuntimeHelpers.GetUninitializedObject(t);
 
             // Here we take advantage of undesirable knowledge on how anonymous types are
             // implemented by the C# compiler. This is risky but we can live with it for

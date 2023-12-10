@@ -1,8 +1,6 @@
 ﻿namespace Z3.Linq;
 
 using Microsoft.Z3;
-
-using System;
 using System.Collections.Generic;
 using System.Reflection;
 
