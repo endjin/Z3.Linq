@@ -1,11 +1,15 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"}]}}
+
 #!markdown
 
 If you want to run this locally, you need to build the solution in Debug mode and then reference the binaries:
 
 #!csharp
 
-#r "..\solutions\Z3.Linq\bin\Debug\net6.0\Z3.Linq.dll"
-#r "..\solutions\Z3.Linq.Examples\bin\Debug\net6.0\Z3.Linq.Examples.dll"
+#r "..\solutions\Z3.Linq\bin\Debug\net8.0\Z3.Linq.dll"
+#r "..\solutions\Z3.Linq.Examples\bin\Debug\net8.0\Z3.Linq.Examples.dll"
 #r "nuget:Microsoft.Z3,*-*"
 #r "nuget:MiaPlaza.ExpressionUtils,*-*"
 
