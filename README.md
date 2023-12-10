@@ -194,7 +194,7 @@ All PRs are welcome.
 
 2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0`, added `Optimize` support via LINQ's `OrderBy`, [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support, demonstrate using `record` types, and fix nullability issues. They upgraded the solution to use [Z3 NuGet package](https://www.nuget.org/packages/Microsoft.Z3.x64/), merged in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, created archives of Bart's original blog posts and talks. They republished the project as [Z3.Linq](https://github.com/endjin/Z3.Linq), created a new [Polyglot Notebook](https://github.com/dotnet/interactive) of [samples](examples/z3-problems.dib), and published a NuGet package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
 
-2023: [Whit Waldo](https://github.com/WhitWaldo) upgrades the project to .NET 8.0
+2023: [Whit Waldo](https://github.com/WhitWaldo) upgrades the project to `.NET 8.0`
 
 ## Project Sponsor
 
