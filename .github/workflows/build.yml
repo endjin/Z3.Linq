@@ -3,6 +3,8 @@ on:
   push:
     branches:
     - main
+    tags:
+    - '*'
   pull_request:
     branches:
     - main
@@ -22,6 +24,14 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  actions: write  # enable cache clean-up
+  checks: write  # enable test result annotations
+  contents: write  # enable creating releases
+  issues: read
+  packages: write  # enable publishing packages
+  pull-requests: write  # enable test result annotations 
 
 jobs:
   prepareConfig:
