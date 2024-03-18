@@ -27,7 +27,15 @@ using (var ctx = new Z3Context())
 
 ### Problem - Linear Algebra
 
-Solve the following system with 3 variables, with linear equalities and inequalities.
+Solve the following system with 3 variables, with linear equalities and inequalities:
+
+$$
+x_1 - x_2 \ge 1
+\\
+x_1 - x_2 \le 3
+\\
+x_1 = 2x_3 + x_2
+$$
 
 ```csharp
 using (var ctx = new Z3Context())
