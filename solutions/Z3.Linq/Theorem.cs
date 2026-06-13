@@ -1,5 +1,5 @@
-﻿namespace Z3.Linq;
- 
+namespace Z3.Linq;
+
 using Microsoft.Z3;
 
 using System;
@@ -582,14 +582,14 @@ public class Theorem
 
     private Environment GetEnvironment(Context context, Type targetType)
     {
-        return GetEnvironment(context, targetType, targetType.Name);
+        return GetEnvironment(context, targetType, targetType.Name, false);
     }
 
-    private Environment GetEnvironment(Context context, Type targetType, string prefix)
+    private Environment GetEnvironment(Context context, Type targetType, string prefix, bool isArray)
     {
         var toReturn = new Environment();
 
-        if (IsCollection(targetType))
+        if (isArray || IsCollection(targetType))
         {
             Type? elType;
 
@@ -607,6 +607,18 @@ public class Theorem
             if (elTypeCode == TypeCode.Object)
             {
                 toReturn.IsArray = true;
+
+                // Nested array (e.g. int[][]): the element type is itself an array or a
+                // collection. Recurse to build the inner array environment and take its sort
+                // as this array's range, so a Select(i) on the outer yields the inner array.
+                if (elType!.IsArray || (elType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(elType.GetGenericTypeDefinition())))
+                {
+                    var innerEnv = GetEnvironment(context, elType, prefix, true);
+                    toReturn.Expr = context.MkArrayConst(prefix, context.IntSort, ((ArrayExpr)innerEnv.Expr!).Sort);
+                    toReturn.Properties[typeof(Array)] = innerEnv;
+
+                    return toReturn;
+                }
 
                 foreach (PropertyInfo parameter in GetPublicInstanceProperties(elType!))
                 {
@@ -704,6 +716,40 @@ public class Theorem
         return toReturn;
     }
 
+    /// <summary>
+    /// Gets the Z3 domain sort for an array element type (used as the index sort).
+    /// </summary>
+    private static Sort GetArrayDomainSort(Context context, Type elementType)
+    {
+        // Arrays are indexed by integers in Z3
+        return context.IntSort;
+    }
+
+    /// <summary>
+    /// Gets the Z3 range sort for a scalar element type.
+    /// </summary>
+    private static Sort GetArrayRangeSort(Context context, Type elementType)
+    {
+        switch (Type.GetTypeCode(elementType))
+        {
+            case TypeCode.String:
+                return context.StringSort;
+            case TypeCode.Int16:
+            case TypeCode.Int32:
+            case TypeCode.Int64:
+            case TypeCode.DateTime:
+                return context.IntSort;
+            case TypeCode.Boolean:
+                return context.BoolSort;
+            case TypeCode.Single:
+            case TypeCode.Decimal:
+            case TypeCode.Double:
+                return context.RealSort;
+            default:
+                throw new NotSupportedException($"Unsupported array element type {elementType.FullName}");
+        }
+    }
+
     private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter, object? template)
     {
         // Normalize types when facing Z3. Theorem variable type mappings allow for strong
@@ -720,41 +766,15 @@ public class Theorem
         {
             if (IsCollection(parameterType))
             {
-                Type eltType = (parameterType.IsArray ? parameterType.GetElementType() : parameterType.GetGenericArguments()[0])
-                    ?? throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
-
-                var arrVal = (ArrayExpr)(subEnv.Expr ?? throw new ArgumentException(
-                    $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
-                    nameof(subEnv)));
-
-                // A solution never changes the length of a collection, so the length has to come
-                // from somewhere: the collection on the template passed to NewTheorem, or failing
-                // that the one already on the instance - its initialiser. A value tuple has nowhere
-                // to put an initialiser and an anonymous instance is created uninitialised, so for
-                // those the template is the only source. With neither, say so by name rather than
-                // fail on the null. See #53 and #78.
-                if ((GetMemberValue(parameter, template) ?? GetMemberValue(parameter, destinationObject)) is not ICollection existing)
+                // Delegate to ExtractCollection for both simple and nested array extraction
+                object? existingMember = parameter switch
                 {
-                    throw new NotSupportedException(
-                        $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
-                }
+                    PropertyInfo info => info.GetValue(destinationObject, null),
+                    FieldInfo info1 => info1.GetValue(destinationObject),
+                    _ => null
+                };
 
-                int existingLength = existing.Count;
-
-                // Fill a typed array in place, rather than an ArrayList that keeps a boxed object[]
-                // backing store and is then copied into a typed array by ToArray. The element values
-                // are still boxed to pass through SetValue, as they were to pass through Add.
-                Array results = Array.CreateInstance(eltType, existingLength);
-
-                TypeCode eltTypeCode = Type.GetTypeCode(eltType);
-
-                for (int i = 0; i < existingLength; i++)
-                {
-                    var numValExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
-                    results.SetValue(ReadZ3Value(numValExpr, eltTypeCode, parameter.Name, eltType), i);
-                }
-
-                value = parameterType.IsArray ? results : Activator.CreateInstance(parameterType, results)!;
+                value = ExtractCollection(existingMember, context, model, subEnv, parameter, parameterType);
             }
             else
             {
@@ -906,6 +926,121 @@ public class Theorem
     }
 
     /// <summary>
+    /// Extracts a collection (simple or nested array) from the Z3 model.
+    /// Handles both flat arrays (int[]) and nested arrays (int[][]) recursively.
+    /// </summary>
+    private static object ExtractCollection(object? existingMember, Context context, Model model, Environment subEnv, MemberInfo parameter, Type parameterType)
+    {
+        Type eltType = parameterType.IsArray ? parameterType.GetElementType()! : parameterType.GetGenericArguments()[0];
+
+        if (eltType == null)
+        {
+            throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
+        }
+
+        var results = new ArrayList();
+
+        var arrVal = subEnv.Expr as ArrayExpr;
+
+        // Determine the collection length from the existing member
+        int length = 0;
+        if (existingMember != null)
+        {
+            var existingCollection = new ArrayList((ICollection)existingMember);
+            length = existingCollection.Count;
+        }
+
+        // Check if this is a nested array (e.g. int[][]) — stored in Properties[typeof(Array)]
+        Environment? innerArrayEnv = null;
+        bool isNestedArray = eltType.IsArray && subEnv.Properties.TryGetValue(typeof(Array), out innerArrayEnv);
+
+        for (int i = 0; i < length; i++)
+        {
+            object? elementVal = null;
+
+            if (arrVal != null)
+            {
+                // For nested arrays, Select(outer, i) yields the inner array (row i).
+                // For simple arrays, Select(arr, i) yields a scalar value.
+                Expr rowExpr = model.Eval(context.MkSelect(arrVal, context.MkInt(i)));
+
+                if (isNestedArray && innerArrayEnv != null)
+                {
+                    // rowExpr is (Array Int Int) for this row — build a temp environment
+                    // holding it and recurse to extract the inner scalar array.
+                    var rowEnv = new Environment { Expr = rowExpr };
+                    object? existingSubMember = null;
+
+                    if (existingMember is ICollection outerCollection)
+                    {
+                        var outerList = new ArrayList(outerCollection);
+                        if (i < outerList.Count)
+                        {
+                            existingSubMember = outerList[i];
+                        }
+                    }
+
+                    elementVal = ExtractCollection(existingSubMember, context, model, rowEnv, parameter, eltType);
+                }
+                else
+                {
+                    var numValExpr = rowExpr;
+
+                    switch (Type.GetTypeCode(eltType))
+                    {
+                        case TypeCode.String:
+                            elementVal = numValExpr.String;
+                            break;
+                        case TypeCode.Int16:
+                        case TypeCode.Int32:
+                            elementVal = ((IntNum)numValExpr).Int;
+                            break;
+                        case TypeCode.Int64:
+                            elementVal = ((IntNum)numValExpr).Int64;
+                            break;
+                        case TypeCode.DateTime:
+                            elementVal = DateTime.FromFileTime(((IntNum)numValExpr).Int64);
+                            break;
+                        case TypeCode.Boolean:
+                            elementVal = numValExpr.IsTrue;
+                            break;
+                        case TypeCode.Single:
+                            elementVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
+                            break;
+                        case TypeCode.Decimal:
+                        {
+                            Expr val = model.Eval(numValExpr);
+                            string numValue = ((RatNum)val).ToDecimalString(128);
+                            ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
+                            if (numValue.EndsWith('?'))
+                            {
+                                numValueSpan = numValueSpan[..^1];
+                            }
+                            elementVal = decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
+                            break;
+                        }
+                        case TypeCode.Double:
+                            elementVal = double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
+                            break;
+                        case TypeCode.Object:
+                            // Complex object element within a collection
+                            elementVal = GetSolution(eltType, context, model, subEnv);
+                            break;
+                        default:
+                            throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
+                    }
+                }
+            }
+
+            results.Add(elementVal);
+        }
+
+        object value = parameterType.IsArray ? results.ToArray(eltType) : Activator.CreateInstance(parameterType, results.ToArray(eltType))!;
+
+        return value;
+    }
+
+    /// <summary>
     /// Gets the solution object for the solved theorem.
     /// </summary>
     /// <typeparam name="T">Environment type to create an instance of.</typeparam>
@@ -952,7 +1087,7 @@ public class Theorem
                 // Mapping from property to field.
                 var field = fields.SingleOrDefault(f => f.Name.StartsWith($"<{parameter.Name}>"));
 
-                if (field == null) 
+                if (field == null)
                 {
                     continue;
                 }
