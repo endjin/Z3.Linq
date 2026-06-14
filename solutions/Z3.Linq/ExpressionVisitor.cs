@@ -1,6 +1,7 @@
 namespace Z3.Linq;
 
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -55,6 +56,160 @@ internal sealed class ExpressionVisitor
     internal static Expr Translate(Context context, Environment environment, Expression expression, ParameterExpression param)
     {
         return new ExpressionVisitor(context, environment, param).Visit(expression);
+    }
+
+    /// <summary>
+    /// Resolves an array index expression <c>array[i]</c> (a <see cref="ExpressionType.ArrayIndex"/> binary node).
+    /// Two collection-handling modes are supported:
+    /// <list type="bullet">
+    /// <item><term>Constants</term><description>The array's environment is a <see cref="MultipleEnvironment"/>; the
+    /// element sub-environment for index <c>i</c> is created lazily on first access and its Z3 constant returned.
+    /// For nested arrays (<c>int[][]</c>) this recurses: <c>Cells[i]</c> yields a row <c>MultipleEnvironment</c>,
+    /// and <c>row[j]</c> yields the scalar constant <c>Cells_i_j</c>.</description></item>
+    /// <item><term>Array</term><description>The array's environment holds an <c>ArrayExpr</c>; Z3 <c>Select</c> yields the element.</description></item>
+    /// </list>
+    /// </summary>
+    private static Expr VisitArrayIndex(Context context, Environment environment, BinaryExpression expression, ParameterExpression param)
+    {
+        // Constants mode: try to resolve the array environment WITHOUT going through Translate (which would lose the
+        // MultipleEnvironment, since Translate only returns an Expr). For nested arrays the Left operand is itself an
+        // ArrayIndex, so we recurse one level down through TryResolveArrayEnvironment.
+        if (TryResolveArrayEnvironment(context, environment, expression, param, out var arrayEnv) && arrayEnv is MultipleEnvironment multiEnv)
+        {
+            var indexExpr = PartialEvaluator.PartialEval(Expression.Lambda(expression.Right), ExpressionInterpreter.Instance).Body;
+            if (indexExpr.NodeType == ExpressionType.Constant)
+            {
+                var index = ExpressionInterpreter.Instance.Interpret(indexExpr);
+
+                if (!multiEnv.SubEnvironments.TryGetValue(index!, out var subSubEnv))
+                {
+                    var newPrefix = $"{multiEnv.Prefix}_{index}";
+                    subSubEnv = ResolveElementEnvironment(context, multiEnv, newPrefix);
+                    multiEnv.SubEnvironments[index!] = subSubEnv;
+                }
+
+                // Scalar element: return its Z3 constant. Nested element (a row of int[][]): its Expr is null and
+                // the caller's own ArrayIndex will recurse here to resolve the next level.
+                if (subSubEnv.Expr != null)
+                {
+                    return subSubEnv.Expr;
+                }
+            }
+        }
+
+        // Array mode (default), or a symbolic index in Constants mode: array.Left is an ArrayExpr; Select yields the element.
+        return context.MkSelect((ArrayExpr)Translate(context, environment, expression.Left, param), Translate(context, environment, expression.Right, param));
+    }
+
+    /// <summary>
+    /// Attempts to resolve the <see cref="Environment"/> bound to an array-typed left operand of an
+    /// <c>ArrayIndex</c> node, without going through <see cref="Translate"/> (which only returns an <see cref="Expr"/>
+    /// and would therefore lose a <see cref="MultipleEnvironment"/> that has no Expr yet). Handles two shapes:
+    /// <list type="bullet">
+    /// <item><term><c>Cells[i]</c></term><description>Left is a <see cref="MemberExpression"/> — resolve the bound env.</description></item>
+    /// <item><term><c>Cells[i][j]</c></term><description>Left is itself an <c>ArrayIndex</c> — recurse to materialize the
+    /// row sub-environment first, then index into it.</description></item>
+    /// </list>
+    /// </summary>
+    /// <returns><c>true</c> if the left operand resolves to a bound environment (Constants-mode candidate).</returns>
+    private static bool TryResolveArrayEnvironment(Context context, Environment environment, BinaryExpression expression, ParameterExpression param, [NotNullWhen(true)] out Environment? arrayEnv)
+    {
+        var left = expression.Left;
+
+        if (left is MemberExpression member)
+        {
+            arrayEnv = ResolveMemberEnvironment(environment, member);
+            return true;
+        }
+
+        // Nested array index, e.g. the `Cells[i]` sub-expression of `Cells[i][j]`: recurse to obtain the row
+        // sub-environment (a MultipleEnvironment for an int[][] row), materializing it lazily.
+        if (left is BinaryExpression { NodeType: ExpressionType.ArrayIndex } nested)
+        {
+            if (TryResolveArrayEnvironment(context, environment, nested, param, out var parentEnv) && parentEnv is MultipleEnvironment parentMulti)
+            {
+                var nestedIndexExpr = PartialEvaluator.PartialEval(Expression.Lambda(nested.Right), ExpressionInterpreter.Instance).Body;
+                if (nestedIndexExpr.NodeType == ExpressionType.Constant)
+                {
+                    var nestedIndex = ExpressionInterpreter.Instance.Interpret(nestedIndexExpr);
+                    if (!parentMulti.SubEnvironments.TryGetValue(nestedIndex!, out arrayEnv))
+                    {
+                        var newPrefix = $"{parentMulti.Prefix}_{nestedIndex}";
+                        arrayEnv = ResolveElementEnvironment(context, parentMulti, newPrefix);
+                        parentMulti.SubEnvironments[nestedIndex!] = arrayEnv;
+                    }
+                    return true;
+                }
+            }
+        }
+
+        arrayEnv = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Creates the element environment for a Constants-mode collection. For a scalar element type this
+    /// is a single Z3 constant (e.g. <c>Cells_0</c>); for a nested array element type (<c>int[][]</c>)
+    /// it is a further <see cref="MultipleEnvironment"/> so that <c>Cells[i][j]</c> recurses one level down.
+    /// </summary>
+    private static Environment ResolveElementEnvironment(Context context, MultipleEnvironment multiEnv, string newPrefix)
+    {
+        var elementType = multiEnv.ElementType;
+
+        if (elementType.IsArray || (elementType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(elementType.GetGenericTypeDefinition())))
+        {
+            // Nested array element (e.g. a row of int[][]): a further MultipleEnvironment, so a subsequent
+            // ArrayIndex on this sub-env recurses and produces Cells_i_j.
+            var nestedElt = elementType.IsArray ? elementType.GetElementType()! : elementType.GetGenericArguments()[0];
+            return new MultipleEnvironment(newPrefix, nestedElt);
+        }
+
+        // Scalar element: create one Z3 constant of the appropriate sort.
+        var env = new Environment();
+        env.Expr = Type.GetTypeCode(elementType) switch
+        {
+            TypeCode.String => context.MkConst(newPrefix, context.StringSort),
+            TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64 or TypeCode.DateTime => context.MkIntConst(newPrefix),
+            TypeCode.Boolean => context.MkBoolConst(newPrefix),
+            TypeCode.Single or TypeCode.Decimal or TypeCode.Double => context.MkRealConst(newPrefix),
+            _ => throw new NotSupportedException($"Unsupported Constants-mode element type {elementType.FullName} for {newPrefix}."),
+        };
+        return env;
+    }
+
+    /// <summary>
+    /// Resolves the <see cref="Environment"/> bound to a member of the environment type, walking a (possibly
+    /// nested) member hierarchy the same way <see cref="VisitMember"/> does. Returns the sub-environment for the
+    /// member, or throws if the member is not a bound theorem variable.
+    /// </summary>
+    private static Environment ResolveMemberEnvironment(Environment environment, MemberExpression member)
+    {
+        List<MemberExpression> hierarchy = [];
+        var mExp = member;
+        hierarchy.Add(mExp);
+
+        while (mExp.Expression is MemberExpression parent)
+        {
+            mExp = parent;
+            hierarchy.Add(parent);
+        }
+
+        hierarchy.Reverse();
+
+        Environment subEnv = environment;
+
+        foreach (var memberExpression in hierarchy)
+        {
+            Environment? nextSubEnv;
+            if (!((memberExpression.Member is PropertyInfo property && subEnv.Properties.TryGetValue(property, out nextSubEnv)) ||
+                    (memberExpression.Member is FieldInfo field && subEnv.Properties.TryGetValue(field, out nextSubEnv))))
+            {
+                throw new NotSupportedException("Unknown parameter encountered: " + member.Member.Name + ".");
+            }
+            subEnv = nextSubEnv;
+        }
+
+        return subEnv;
     }
 
     private Expr Visit(Expression expression)
@@ -150,7 +305,7 @@ internal sealed class ExpressionVisitor
                 return VisitConditional((ConditionalExpression)expression);
 
             case ExpressionType.ArrayIndex:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));
+                return VisitArrayIndex(context, environment, (BinaryExpression)expression, param);
 
             case ExpressionType.Index:
                 return VisitIndex((IndexExpression)expression, static (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));

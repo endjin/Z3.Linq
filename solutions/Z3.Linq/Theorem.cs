@@ -83,6 +83,16 @@ public class Theorem
     protected Z3Context Context => context;
 
     /// <summary>
+    /// Controls how collection (array/IEnumerable) properties are modeled in Z3.
+    /// <list type="bullet">
+    /// <item><term>Array</term><description>Z3 array theory: a single <c>ArrayExpr</c> with <c>Select</c>/<c>Store</c> (supports nested <c>int[][]</c>).</description></item>
+    /// <item><term>Constants</term><description>One Z3 constant per element, created lazily on index access via <see cref="MultipleEnvironment"/> (the classic endjin binding model).</description></item>
+    /// </list>
+    /// Default is <see cref="CollectionHandling.Array"/> to preserve existing behavior (incl. nested-array support).
+    /// </summary>
+    public CollectionHandling DefaultCollectionHandling { get; set; } = CollectionHandling.Array;
+
+    /// <summary>
     /// Returns a comma-separated representation of the constraints embodied in the theorem.
     /// </summary>
     /// <returns>Comma-separated string representation of the theorem's constraints.</returns>
@@ -602,6 +612,14 @@ public class Theorem
                 elType = targetType.GetGenericArguments()[0];
             }
 
+            // Constants mode: one Z3 constant per element, lazily created on index access.
+            // The element sub-environments are materialized by the expression visitor when an
+            // ArrayIndex node is encountered (see ExpressionVisitor.ResolveArrayElement).
+            if (DefaultCollectionHandling == CollectionHandling.Constants)
+            {
+                return new MultipleEnvironment(prefix, elType!);
+            }
+
             TypeCode elTypeCode = Type.GetTypeCode(elType);
 
             if (elTypeCode == TypeCode.Object)
@@ -941,6 +959,7 @@ public class Theorem
         var results = new ArrayList();
 
         var arrVal = subEnv.Expr as ArrayExpr;
+        var multiEnv = subEnv as MultipleEnvironment;
 
         // Determine the collection length from the existing member
         int length = 0;
@@ -948,6 +967,15 @@ public class Theorem
         {
             var existingCollection = new ArrayList((ICollection)existingMember);
             length = existingCollection.Count;
+        }
+
+        // Constants mode: the largest materialized sub-environment index extends the length, so that
+        // every lazily-created Z3 constant (Cells_0, Cells_1, …) is read back from the model.
+        bool isConstantsMode = multiEnv != null && multiEnv.SubEnvironments.Count > 0;
+        if (isConstantsMode)
+        {
+            int maxBound = multiEnv!.SubEnvironments.Keys.Max(k => Convert.ToInt32(k));
+            length = Math.Max(length, maxBound + 1);
         }
 
         // Check if this is a nested array (e.g. int[][]) — stored in Properties[typeof(Array)]
@@ -958,7 +986,31 @@ public class Theorem
         {
             object? elementVal = null;
 
-            if (arrVal != null)
+            // Constants mode: read the scalar/element Z3 constant straight from its sub-environment.
+            if (isConstantsMode && multiEnv!.SubEnvironments.TryGetValue(i, out var subSubEnv))
+            {
+                if (subSubEnv is MultipleEnvironment nestedMulti)
+                {
+                    // Nested Constants collection (e.g. int[][] modeled as constants): recurse per row.
+                    object? existingSubMember = null;
+                    if (existingMember is ICollection outerCollection)
+                    {
+                        var outerList = new ArrayList(outerCollection);
+                        if (i < outerList.Count)
+                        {
+                            existingSubMember = outerList[i];
+                        }
+                    }
+
+                    elementVal = ExtractCollection(existingSubMember, context, model, nestedMulti, parameter, eltType);
+                }
+                else if (subSubEnv.Expr != null)
+                {
+                    Expr val = model.Eval(subSubEnv.Expr);
+                    elementVal = ConvertScalarExpr(val, eltType, context, model, subEnv, parameter);
+                }
+            }
+            else if (arrVal != null)
             {
                 // For nested arrays, Select(outer, i) yields the inner array (row i).
                 // For simple arrays, Select(arr, i) yields a scalar value.
@@ -984,51 +1036,7 @@ public class Theorem
                 }
                 else
                 {
-                    var numValExpr = rowExpr;
-
-                    switch (Type.GetTypeCode(eltType))
-                    {
-                        case TypeCode.String:
-                            elementVal = numValExpr.String;
-                            break;
-                        case TypeCode.Int16:
-                        case TypeCode.Int32:
-                            elementVal = ((IntNum)numValExpr).Int;
-                            break;
-                        case TypeCode.Int64:
-                            elementVal = ((IntNum)numValExpr).Int64;
-                            break;
-                        case TypeCode.DateTime:
-                            elementVal = DateTime.FromFileTime(((IntNum)numValExpr).Int64);
-                            break;
-                        case TypeCode.Boolean:
-                            elementVal = numValExpr.IsTrue;
-                            break;
-                        case TypeCode.Single:
-                            elementVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
-                            break;
-                        case TypeCode.Decimal:
-                        {
-                            Expr val = model.Eval(numValExpr);
-                            string numValue = ((RatNum)val).ToDecimalString(128);
-                            ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
-                            if (numValue.EndsWith('?'))
-                            {
-                                numValueSpan = numValueSpan[..^1];
-                            }
-                            elementVal = decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
-                            break;
-                        }
-                        case TypeCode.Double:
-                            elementVal = double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
-                            break;
-                        case TypeCode.Object:
-                            // Complex object element within a collection
-                            elementVal = GetSolution(eltType, context, model, subEnv);
-                            break;
-                        default:
-                            throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
-                    }
+                    elementVal = ConvertScalarExpr(rowExpr, eltType, context, model, subEnv, parameter);
                 }
             }
 
@@ -1038,6 +1046,56 @@ public class Theorem
         object value = parameterType.IsArray ? results.ToArray(eltType) : Activator.CreateInstance(parameterType, results.ToArray(eltType))!;
 
         return value;
+    }
+
+    /// <summary>
+    /// Converts a Z3 scalar expression (as evaluated against a model) into a CLR value of the given
+    /// element type. Shared by the Array-mode and Constants-mode collection extraction paths so the
+    /// two modes agree on how Z3 values are materialized.
+    /// </summary>
+    /// <param name="numValExpr">Evaluated Z3 expression of the scalar (already passed through <c>model.Eval</c> for Array mode, or a constant for Constants mode).</param>
+    /// <param name="eltType">CLR element type to convert into.</param>
+    /// <param name="context">Z3 context (used for Decimal/Real evaluation).</param>
+    /// <param name="model">Z3 model (used for Decimal precision evaluation).</param>
+    /// <param name="subEnv">Environment of the collection (used to recurse for complex-object elements).</param>
+    /// <param name="parameter">Member being extracted (for error messages).</param>
+    /// <returns>CLR scalar value.</returns>
+    private static object? ConvertScalarExpr(Expr numValExpr, Type eltType, Context context, Model model, Environment subEnv, MemberInfo parameter)
+    {
+        switch (Type.GetTypeCode(eltType))
+        {
+            case TypeCode.String:
+                return numValExpr.String;
+            case TypeCode.Int16:
+            case TypeCode.Int32:
+                return ((IntNum)numValExpr).Int;
+            case TypeCode.Int64:
+                return ((IntNum)numValExpr).Int64;
+            case TypeCode.DateTime:
+                return DateTime.FromFileTime(((IntNum)numValExpr).Int64);
+            case TypeCode.Boolean:
+                return numValExpr.IsTrue;
+            case TypeCode.Single:
+                return double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
+            case TypeCode.Decimal:
+            {
+                Expr val = model.Eval(numValExpr);
+                string numValue = ((RatNum)val).ToDecimalString(128);
+                ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
+                if (numValue.EndsWith('?'))
+                {
+                    numValueSpan = numValueSpan[..^1];
+                }
+                return decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
+            }
+            case TypeCode.Double:
+                return double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
+            case TypeCode.Object:
+                // Complex object element within a collection
+                return GetSolution(eltType, context, model, subEnv);
+            default:
+                throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
+        }
     }
 
     /// <summary>
