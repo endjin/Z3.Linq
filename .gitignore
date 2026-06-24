@@ -364,3 +364,6 @@ _z3-feed/*.nupkg
 coverage.*.xml
 TestResults/
 *.trx
+
+# Local publish output for Polyglot repro notebooks (dotnet publish -o .deploy)
+.deploy/
