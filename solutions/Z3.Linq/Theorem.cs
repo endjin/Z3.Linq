@@ -224,6 +224,29 @@ public class Theorem
         }
     }
 
+    /// <summary>
+    /// Gets the Z3 sort a symbol of the given CLR type is declared with, or <see langword="null"/>
+    /// if the type is not one the library maps.
+    /// </summary>
+    /// <remarks>
+    /// This is the only mapping from CLR type to sort. A scalar symbol is a constant of this sort,
+    /// and a collection symbol is a Z3 array from <c>Int</c> to it, so the two cannot disagree -
+    /// there is nothing else to consult. Collections used to carry a mapping of their own, and
+    /// only its <c>int</c> row agreed with this one; every other element type declared a domain or
+    /// range that contradicted how its elements were constrained and read back. See #64.
+    /// </remarks>
+    private static Sort? TryGetSymbolSort(Context context, TypeCode typeCode)
+    {
+        return typeCode switch
+        {
+            TypeCode.String => context.StringSort,
+            TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64 or TypeCode.DateTime => context.IntSort,
+            TypeCode.Boolean => context.BoolSort,
+            TypeCode.Single or TypeCode.Decimal or TypeCode.Double => context.RealSort,
+            _ => null,
+        };
+    }
+
     private Environment GetEnvironment(Context context, Type targetType)
     {
         return GetEnvironment(context, targetType, targetType.Name);
@@ -246,65 +269,34 @@ public class Theorem
                 elType = targetType.GetGenericArguments()[0];
             }
 
-            Sort arrDomain;
-            Sort arrRange;
-                
-            switch (Type.GetTypeCode(elType))
-            {
-                case TypeCode.String:
-                    arrDomain = context.StringSort;
-                    arrRange = context.MkBitVecSort(16);
-                    break;
-                case TypeCode.Int16:
-                    arrDomain = context.IntSort;
-                    arrRange = context.MkBitVecSort(16);
-                    break;
-                case TypeCode.Int32:
-                    arrDomain = context.IntSort;
-                    arrRange = context.IntSort;
-                    break;
-                case TypeCode.Int64:
-                case TypeCode.DateTime:
-                    arrDomain = context.IntSort;
-                    arrRange = context.MkBitVecSort(64);
-                    break;
-                case TypeCode.Boolean:
-                    arrDomain = context.BoolSort;
-                    arrRange = context.BoolSort;
-                    break;
-                case TypeCode.Single:
-                    arrDomain = context.RealSort;
-                    arrRange = context.MkFPSortSingle();
-                    break;
-                case TypeCode.Decimal:
-                    arrDomain = context.RealSort;
-                    arrRange = context.MkFPSortSingle();
-                    break;
-                case TypeCode.Double:
-                    arrDomain = context.RealSort;
-                    arrRange = context.MkFPSortDouble();
-                    break;
-                case TypeCode.Object:
-                    toReturn.IsArray = true;
+            TypeCode elTypeCode = Type.GetTypeCode(elType);
 
-                    foreach (PropertyInfo parameter in elType!.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            if (elTypeCode == TypeCode.Object)
+            {
+                toReturn.IsArray = true;
+
+                foreach (PropertyInfo parameter in elType!.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    var newPrefix = parameter.Name;
+
+                    if (!string.IsNullOrEmpty(prefix))
                     {
-                        var newPrefix = parameter.Name;
-                            
-                        if (!string.IsNullOrEmpty(prefix))
-                        {
-                            newPrefix = $"{prefix}_{newPrefix}";
-                        }
-                            
-                        toReturn.Properties[parameter] = GetEnvironment(context, parameter, newPrefix, true);
+                        newPrefix = $"{prefix}_{newPrefix}";
                     }
 
-                    return toReturn;
-                default:
-                    throw new NotSupportedException($"Unsupported member type {targetType.FullName}");
+                    toReturn.Properties[parameter] = GetEnvironment(context, parameter, newPrefix, true);
+                }
+
+                return toReturn;
             }
 
-            toReturn.Expr = context.MkArrayConst(prefix, arrDomain, arrRange);
+            // Elements are always read back with an integer index - ConvertZ3Expression selects
+            // with MkInt(i) - so the domain is Int whatever the element type. The range is the
+            // sort a scalar of that type would get, from the one mapping both share. See #64.
+            Sort elementSort = TryGetSymbolSort(context, elTypeCode)
+                ?? throw new NotSupportedException($"Unsupported member type {targetType.FullName}");
+
+            toReturn.Expr = context.MkArrayConst(prefix, context.IntSort, elementSort);
         }
         else
         {
@@ -362,75 +354,26 @@ public class Theorem
             // indistinguishable. Using the prefix means those become ValueTuple`8_Item1 and
             // ValueTuple`8_Rest_Item1.
             string name = prefix;
-            switch (Type.GetTypeCode(parameterType))
+            TypeCode typeCode = Type.GetTypeCode(parameterType);
+
+            if (typeCode == TypeCode.Object)
             {
-                case TypeCode.String:
-                    constrExp = context.MkConst(name, context.StringSort);
-                    break;
-                case TypeCode.Int16:
-                case TypeCode.Int32:
-                case TypeCode.Int64:
-                case TypeCode.DateTime:
-                    constrExp = context.MkIntConst(name);
-                    break;
-                case TypeCode.Boolean:
-                    constrExp = context.MkBoolConst(name);
-                    break;
-                case TypeCode.Single:
-                case TypeCode.Decimal:
-                case TypeCode.Double:
-                    constrExp = context.MkRealConst(name);
-                    break;
-                case TypeCode.Object:
-                    return GetEnvironment(context, parameterType, prefix);
-                default:
-                    throw new NotSupportedException("Unsupported parameter type for " + name + ".");
+                return GetEnvironment(context, parameterType, prefix);
             }
+
+            Sort sort = TryGetSymbolSort(context, typeCode)
+                ?? throw new NotSupportedException("Unsupported parameter type for " + name + ".");
+
+            constrExp = context.MkConst(name, sort);
         }
         else
         {
-            Sort arrDomain;
-            Sort arrRange;
-            switch (Type.GetTypeCode(parameterType))
-            {
-                case TypeCode.String:
-                    arrDomain = context.StringSort;
-                    arrRange = context.MkBitVecSort(16);
-                    break;
-                case TypeCode.Int16:
-                    arrDomain = context.IntSort;
-                    arrRange = context.MkBitVecSort(16);
-                    break;
-                case TypeCode.Int32:
-                    arrDomain = context.IntSort;
-                    arrRange = context.IntSort;
-                    break;
-                case TypeCode.Int64:
-                case TypeCode.DateTime:
-                    arrDomain = context.IntSort;
-                    arrRange = context.MkBitVecSort(64);
-                    break;
-                case TypeCode.Boolean:
-                    arrDomain = context.BoolSort;
-                    arrRange = context.BoolSort;
-                    break;
-                case TypeCode.Single:
-                    arrDomain = context.RealSort;
-                    arrRange = context.MkFPSortSingle();
-                    break;
-                case TypeCode.Decimal:
-                    arrDomain = context.RealSort;
-                    arrRange = context.MkFPSortSingle();
-                    break;
-                case TypeCode.Double:
-                    arrDomain = context.RealSort;
-                    arrRange = context.MkFPSortDouble();
-                    break;
-                default:
-                    throw new NotSupportedException($"Only one level of object collections is currently supported, 2 levels detected with prefix {prefix}");
+            // One Z3 array per property of the element type, indexed by position. Domain and
+            // range are chosen exactly as for a collection of the property type. See #64.
+            Sort elementSort = TryGetSymbolSort(context, Type.GetTypeCode(parameterType))
+                ?? throw new NotSupportedException($"Only one level of object collections is currently supported, 2 levels detected with prefix {prefix}");
 
-            }
-            constrExp = context.MkArrayConst(prefix, arrDomain, arrRange);
+            constrExp = context.MkArrayConst(prefix, context.IntSort, elementSort);
         }
 
         toReturn.Expr = constrExp;
@@ -500,6 +443,9 @@ public class Theorem
                             numVal = numValExpr.String;
                             break;
                         case TypeCode.Int16:
+                            // Checked, for the reason given on the scalar arm below. See #63.
+                            numVal = checked((short)((IntNum)numValExpr).Int);
+                            break;
                         case TypeCode.Int32:
                             numVal = ((IntNum)numValExpr).Int;
                             break;
