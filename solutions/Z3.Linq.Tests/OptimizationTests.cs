@@ -389,7 +389,7 @@ public class OptimizationTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A DateTime is encoded as an integer file time, so ordering it is ordering that integer -
+    /// A DateTime is encoded as an integer - its ticks - so ordering it is ordering that integer -
     /// which is only the same thing as ordering the instants because every constant on the way in
     /// is converted the same way, whatever kind it carried. This test puts one bound in local time
     /// and one in UTC to say so: they are half an hour apart on the timeline, not the seven-and-a-

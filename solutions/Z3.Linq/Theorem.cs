@@ -487,8 +487,8 @@ public class Theorem
                             numVal = ((IntNum)numValExpr).Int64;
                             break;
                         case TypeCode.DateTime:
-                            // FromFileTimeUtc, for the reason given on the scalar arm below. See #56.
-                            numVal = DateTime.FromFileTimeUtc(((IntNum)numValExpr).Int64);
+                            // Ticks on the UTC timeline, for the reason given on the scalar arm below.
+                            numVal = ToDateTime(((IntNum)numValExpr).Int64, parameter.Name);
                             break;
                         case TypeCode.Boolean:
                             numVal = numValExpr.IsTrue;
@@ -554,11 +554,11 @@ public class Theorem
                     value = ((IntNum)val).Int64;
                     break;
                 case TypeCode.DateTime:
-                    // The write path encodes the instant with ToFileTimeUtc (ExpressionVisitor.cs:311),
-                    // whose inverse is FromFileTimeUtc. FromFileTime converts to local time, which
-                    // shifts the value by the machine's UTC offset and makes the same theorem answer
-                    // differently on different machines. See #56.
-                    value = DateTime.FromFileTimeUtc(((IntNum)val).Int64);
+                    // The write path encodes the instant as its ticks on the UTC timeline
+                    // (ExpressionVisitor.ToUtcTicks), so the value is read back as UTC from the
+                    // same ticks. It used to be a Windows file time, read with FromFileTimeUtc, which
+                    // could express nothing before 1601. See #56 and #83.
+                    value = ToDateTime(((IntNum)val).Int64, parameter.Name);
                     break;
                 case TypeCode.Boolean:
                     value = val.IsTrue;
@@ -616,6 +616,28 @@ public class Theorem
         }
 
         return value!;
+    }
+
+    /// <summary>
+    /// Reads a <see cref="DateTime"/> symbol back from the ticks Z3 holds it as.
+    /// </summary>
+    /// <remarks>
+    /// The symbol is an unbounded integer, so Z3 can satisfy a constraint with a value no
+    /// <see cref="DateTime"/> can hold - <c>t.X1 &gt; DateTime.MaxValue</c> is satisfiable in
+    /// integers. The <see cref="DateTime"/> constructor would throw for that anyway; this throws
+    /// first, naming the symbol and the range, since the constructor names neither. The same
+    /// trade-off as the checked read of a <c>short</c>: loud rather than wrong. #87 - bounding
+    /// the symbol so Z3 cannot pick such a value - applies here too.
+    /// </remarks>
+    private static DateTime ToDateTime(long ticks, string name)
+    {
+        if (ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
+        {
+            throw new OverflowException(
+                $"The value Z3 chose for the DateTime symbol {name} is outside the range a DateTime can hold, 0001-01-01 to 9999-12-31. See https://github.com/endjin/Z3.Linq/issues/87.");
+        }
+
+        return new DateTime(ticks, DateTimeKind.Utc);
     }
 
     /// <summary>
