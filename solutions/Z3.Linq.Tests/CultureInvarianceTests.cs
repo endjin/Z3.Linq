@@ -53,10 +53,10 @@ public class CultureInvarianceTests
     {
         // Arrange: the case in #52's title. fa-IR is here because its separator is not a comma
         // either - the defect was never specific to one character.
-        RequireANonInvariantRendering(culture, 1.5);
+        CultureInfo cultureInfo = RequireANonInvariantRendering(culture, 1.5);
 
         // Act
-        double? value = SolveOn(culture, () =>
+        double? value = SolveOn(cultureInfo, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<double, int>>()
@@ -83,11 +83,11 @@ public class CultureInvarianceTests
         string culture)
     {
         // Arrange
-        CultureInfo.GetCultureInfo(culture).NumberFormat.NegativeSign.ShouldNotBe("-");
-        RequireANonInvariantRendering(culture, -1.5);
+        CultureInfo cultureInfo = RequireANonInvariantRendering(culture, -1.5);
+        cultureInfo.NumberFormat.NegativeSign.ShouldNotBe("-");
 
         // Act
-        double? value = SolveOn(culture, () =>
+        double? value = SolveOn(cultureInfo, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<double, int>>()
@@ -106,10 +106,10 @@ public class CultureInvarianceTests
     {
         // Arrange: decimal shares the real sort with double and the same arm of the constant
         // switch, but it is a separate CLR formatter, so it gets its own case.
-        RequireANonInvariantRendering(culture, 1.5m);
+        CultureInfo cultureInfo = RequireANonInvariantRendering(culture, 1.5m);
 
         // Act
-        decimal? value = SolveOn(culture, () =>
+        decimal? value = SolveOn(cultureInfo, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<decimal, int>>()
@@ -138,10 +138,10 @@ public class CultureInvarianceTests
     {
         // Arrange
         const string Culture = "de-DE";
-        RequireANonInvariantRendering(Culture, 1.5f);
+        CultureInfo cultureInfo = RequireANonInvariantRendering(Culture, 1.5f);
 
         // Act & Assert
-        Should.Throw<ArgumentException>(() => SolveOn(Culture, () =>
+        Should.Throw<ArgumentException>(() => SolveOn(cultureInfo, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<float, int>>()
@@ -165,10 +165,11 @@ public class CultureInvarianceTests
     {
         // Arrange
         const string Culture = "tr-TR";
-        CultureInfo.GetCultureInfo(Culture).TextInfo.ToLower("I").ShouldNotBe("i");
+        CultureInfo cultureInfo = CultureInfo.GetCultureInfo(Culture);
+        cultureInfo.TextInfo.ToLower("I").ShouldNotBe("i");
 
         // Act
-        string? value = SolveOn(Culture, () =>
+        string? value = SolveOn(cultureInfo, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<string, int>>()
@@ -188,7 +189,7 @@ public class CultureInvarianceTests
         // the fix; if it ever fails, the problem is the harness rather than the culture.
 
         // Act
-        double? value = SolveOn(string.Empty, () =>
+        double? value = SolveOn(CultureInfo.InvariantCulture, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<double, int>>()
@@ -204,7 +205,8 @@ public class CultureInvarianceTests
     /// Asserts that <paramref name="culture"/> renders <paramref name="probe"/> differently from
     /// the invariant culture, so a test using it can detect the defect it exists for.
     /// </summary>
-    private static void RequireANonInvariantRendering(string culture, IFormattable probe)
+    /// <returns>The resolved culture, so the caller resolves it once.</returns>
+    private static CultureInfo RequireANonInvariantRendering(string culture, IFormattable probe)
     {
         CultureInfo cultureInfo = CultureInfo.GetCultureInfo(culture);
 
@@ -217,6 +219,8 @@ public class CultureInvarianceTests
 
         probe.ToString(null, cultureInfo)
             .ShouldNotBe(probe.ToString(null, CultureInfo.InvariantCulture));
+
+        return cultureInfo;
     }
 
     /// <summary>
@@ -228,14 +232,14 @@ public class CultureInvarianceTests
     /// thread is unhandled, so it takes down the test host and the run reports "zero tests ran"
     /// rather than one failure.
     /// </remarks>
-    private static T SolveOn<T>(string culture, Func<T> body)
+    private static T SolveOn<T>(CultureInfo culture, Func<T> body)
     {
         T result = default!;
         ExceptionDispatchInfo? failure = null;
 
         var thread = new Thread(() =>
         {
-            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+            CultureInfo.CurrentCulture = culture;
 
             try
             {
@@ -245,14 +249,22 @@ public class CultureInvarianceTests
             {
                 failure = ExceptionDispatchInfo.Capture(ex);
             }
-        });
+        })
+        {
+            // Foreground is the default, and a foreground thread that outlives the wait below
+            // holds the whole test host open - measured: a process whose Main has returned does
+            // not exit at all while one is still running. That turns the timeout from a clean
+            // failure into a stalled run, which is the opposite of what it is here for.
+            IsBackground = true,
+        };
 
         thread.Start();
 
         // Bounded, so that a solver that never returns fails the test rather than hanging the
         // whole run with no indication of which test stopped. The work itself takes single-digit
         // milliseconds, so the limit is enormous slack rather than a tuned value.
-        thread.Join(SolveTimeout).ShouldBeTrue($"the solve on the {culture} thread did not finish");
+        string name = culture.Name.Length == 0 ? "invariant" : culture.Name;
+        thread.Join(SolveTimeout).ShouldBeTrue($"the solve on the {name} thread did not finish");
 
         failure?.Throw();
         return result;
