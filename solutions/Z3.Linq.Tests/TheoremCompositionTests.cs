@@ -101,8 +101,9 @@ public class TheoremCompositionTests
 
         // Assert
         // Splitting on both line-ending characters keeps this independent of the platform the
-        // tests run on. (Note that the bare name 'Environment' binds to Z3.Linq.Environment
-        // because of the global using, so System.Environment would need qualifying here.)
+        // tests run on. Environment.NewLine is not an option: this namespace is nested inside
+        // Z3.Linq, which is searched before any using directive, so the bare name binds to
+        // Z3.Linq.Environment and System.Environment would have to be qualified.
         string[] lines = log.ToString()
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         lines.Length.ShouldBe(2);
