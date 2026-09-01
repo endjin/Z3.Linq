@@ -1,5 +1,5 @@
-﻿namespace Z3.Linq;
- 
+namespace Z3.Linq;
+
 using System.Collections;
 using System.Globalization;
 using System.Linq.Expressions;
@@ -11,14 +11,16 @@ using MiaPlaza.ExpressionUtils.Evaluating;
 using Microsoft.Z3;
 
 /// <summary>
-/// Translates the LINQ expression trees of the constraints of a theorem into Z3 expressions.
+/// Translates the LINQ expression tree of one theorem constraint into a Z3 expression.
 /// </summary>
 /// <remarks>
-/// Driven by <c>Theorem</c> during <c>Solve</c> and <c>Optimize</c>, which build the
-/// <see cref="Environment"/> it translates against. It is public for historical reasons; there
-/// is no supported reason to call it directly.
+/// One instance translates one constraint: the Z3 context, the environment its symbols are bound
+/// in, and the lambda's parameter are fixed for the whole walk, so they are held as fields and set
+/// once by <see cref="Translate"/> rather than threaded through every method. Driven by
+/// <c>Theorem</c> during <c>Solve</c> and <c>Optimize</c>, which build the <see cref="Environment"/>
+/// it translates against.
 /// </remarks>
-public static class ExpressionVisitor
+internal sealed class ExpressionVisitor
 {
     /// <summary>The generic definition of <see cref="Z3Methods.Distinct{T}"/>, cached for the call-site match.</summary>
     private static readonly MethodInfo DistinctMethod = typeof(Z3Methods).GetMethod(nameof(Z3Methods.Distinct))!;
@@ -31,113 +33,131 @@ public static class ExpressionVisitor
     private static readonly MethodInfo EnumerableSelectMethod =
         typeof(Enumerable).GetMethods().First(m => m.Name == nameof(Enumerable.Select) && m.GetParameters().Length == 2);
 
+    private readonly Context context;
+    private readonly Environment environment;
+    private readonly ParameterExpression param;
+
+    private ExpressionVisitor(Context context, Environment environment, ParameterExpression param)
+    {
+        this.context = context;
+        this.environment = environment;
+        this.param = param;
+    }
+
     /// <summary>
-    /// Main visitor method to translate the LINQ expression tree into a Z3 expression handle.
+    /// Translates a constraint's expression tree into a Z3 expression handle.
     /// </summary>
     /// <param name="context">Z3 context.</param>
     /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
-    /// <param name="expression">LINQ expression tree node to be translated.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
+    /// <param name="expression">LINQ expression tree to be translated.</param>
+    /// <param name="param">The constraint lambda's parameter, i.e. the theorem's environment variable.</param>
     /// <returns>Z3 expression handle.</returns>
-    public static Expr Visit(Context context, Environment environment, Expression expression, ParameterExpression param)
+    internal static Expr Translate(Context context, Environment environment, Expression expression, ParameterExpression param)
     {
-        // Largely table-driven mechanism, providing constructor lambdas to generic Visit* methods, classified by type and arity.
+        return new ExpressionVisitor(context, environment, param).Visit(expression);
+    }
+
+    private Expr Visit(Expression expression)
+    {
+        // Largely table-driven mechanism, providing constructor lambdas to Visit* methods,
+        // classified by node type and arity. The lambdas take the context so they stay
+        // non-capturing and are cached by the compiler rather than allocated per node.
         switch (expression.NodeType)
         {
             case ExpressionType.And:
             case ExpressionType.AndAlso:
-                return VisitLogical(context, environment, (BinaryExpression)expression, param, "&", static (ctx, a, b) => ctx.MkAnd(a, b));
+                return VisitLogical((BinaryExpression)expression, "&", static (ctx, a, b) => ctx.MkAnd(a, b));
 
             case ExpressionType.Or:
             case ExpressionType.OrElse:
-                return VisitLogical(context, environment, (BinaryExpression)expression, param, "|", static (ctx, a, b) => ctx.MkOr(a, b));
+                return VisitLogical((BinaryExpression)expression, "|", static (ctx, a, b) => ctx.MkOr(a, b));
 
             case ExpressionType.ExclusiveOr:
-                return VisitLogical(context, environment, (BinaryExpression)expression, param, "^", static (ctx, a, b) => ctx.MkXor(a, b));
+                return VisitLogical((BinaryExpression)expression, "^", static (ctx, a, b) => ctx.MkXor(a, b));
 
             case ExpressionType.Not:
-                return VisitUnary(context, environment, (UnaryExpression)expression, param, (ctx, a) => ctx.MkNot((BoolExpr)a));
+                return VisitUnary((UnaryExpression)expression, static (ctx, a) => ctx.MkNot((BoolExpr)a));
 
             case ExpressionType.Negate:
             case ExpressionType.NegateChecked:
-                return VisitUnary(context, environment, (UnaryExpression)expression, param, (ctx, a) => ctx.MkUnaryMinus((ArithExpr)a));
+                return VisitUnary((UnaryExpression)expression, static (ctx, a) => ctx.MkUnaryMinus((ArithExpr)a));
 
             case ExpressionType.Add:
             case ExpressionType.AddChecked:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkAdd((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkAdd((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.Subtract:
             case ExpressionType.SubtractChecked:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkSub((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkSub((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.Multiply:
             case ExpressionType.MultiplyChecked:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkMul((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkMul((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.Divide:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkDiv((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkDiv((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.Modulo:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, static (ctx, a, b) =>
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) =>
                     a is IntExpr ia && b is IntExpr ib
                         ? ctx.MkRem(ia, ib)
                         : throw new NotSupportedException("The modulo operator is supported only on integer operands; Z3 has no remainder on real-sorted values."));
 
             case ExpressionType.LessThan:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkLt((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkLt((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.LessThanOrEqual:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkLe((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkLe((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.GreaterThan:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkGt((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkGt((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.GreaterThanOrEqual:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkGe((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkGe((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.Equal:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkEq(a, b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkEq(a, b));
 
             case ExpressionType.NotEqual:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkNot(ctx.MkEq(a, b)));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkNot(ctx.MkEq(a, b)));
 
             case ExpressionType.MemberAccess:
-                return VisitMember(context, environment, (MemberExpression)expression, param);
+                return VisitMember((MemberExpression)expression);
 
             case ExpressionType.Constant:
-                return VisitConstant(context, (ConstantExpression)expression);
+                return VisitConstantValue(((ConstantExpression)expression).Value!);
 
             case ExpressionType.Call:
-                return VisitCall(context, environment, (MethodCallExpression)expression, param);
+                return VisitCall((MethodCallExpression)expression);
 
             case ExpressionType.Conditional:
-                return VisitConditional(context, environment, (ConditionalExpression)expression, param);
+                return VisitConditional((ConditionalExpression)expression);
 
             case ExpressionType.ArrayIndex:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));
-                
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));
+
             case ExpressionType.Index:
-                return VisitIndex(context, environment, (IndexExpression)expression, param, (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));
+                return VisitIndex((IndexExpression)expression, static (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));
 
             case ExpressionType.Convert:
-                return VisitConvert(context, environment, (UnaryExpression)expression, param);
+                return VisitConvert((UnaryExpression)expression);
 
             case ExpressionType.Power:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkPower((ArithExpr)a, (ArithExpr)b));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkPower((ArithExpr)a, (ArithExpr)b));
 
             default:
                 throw new NotSupportedException("Unsupported expression node type encountered: " + expression.NodeType);
         }
     }
 
-    private static Expr VisitConvert(Context context, Environment environment, UnaryExpression expression, ParameterExpression param)
+    private Expr VisitConvert(UnaryExpression expression)
     {
         if (expression.Type == expression.Operand.Type)
         {
-            return Visit(context, environment, expression.Operand, param);
+            return Visit(expression.Operand);
         }
 
-        var inner = Visit(context, environment, expression.Operand, param);
+        Expr inner = Visit(expression.Operand);
 
         // A numeric conversion the compiler inserted, or the caller wrote, means one of three
         // things in Z3, and which one depends on the sorts involved rather than on the CLR
@@ -151,8 +171,8 @@ public static class ExpressionVisitor
         // it - int-to-real for every conversion to double, real-to-int for every conversion to
         // int - and had no arm at all for long, float or decimal. See #63 and #76.
         Sort? targetSort = expression.Type == typeof(char)
-            ? context.IntSort
-            : Theorem.TryGetSymbolSort(context, Type.GetTypeCode(expression.Type));
+            ? this.context.IntSort
+            : Theorem.TryGetSymbolSort(this.context, Type.GetTypeCode(expression.Type));
 
         if (targetSort is not null)
         {
@@ -163,12 +183,12 @@ public static class ExpressionVisitor
 
             if (inner.IsInt && targetSort is RealSort)
             {
-                return context.MkInt2Real((IntExpr)inner);
+                return this.context.MkInt2Real((IntExpr)inner);
             }
 
             if (inner.IsReal && targetSort is IntSort)
             {
-                return context.MkReal2Int((RealExpr)inner);
+                return this.context.MkReal2Int((RealExpr)inner);
             }
         }
 
@@ -176,27 +196,21 @@ public static class ExpressionVisitor
     }
 
     /// <summary>
-    /// Visitor method to translate a binary expression.
+    /// Translates a binary expression, combining the translated operands with <paramref name="ctor"/>.
     /// </summary>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <param name="expression">Binary expression.</param>
-    /// <param name="ctor">Constructor to combine recursive visitor results.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
+    /// <param name="ctor">Combines the context and the two recursively translated operands.</param>
     /// <returns>Z3 expression handle.</returns>
-    private static Expr VisitBinary(Context context, Environment environment, BinaryExpression expression, ParameterExpression param, Func<Context, Expr, Expr, Expr> ctor)
+    private Expr VisitBinary(BinaryExpression expression, Func<Context, Expr, Expr, Expr> ctor)
     {
-        return ctor(context, Visit(context, environment, expression.Left, param), Visit(context, environment, expression.Right, param));
+        return ctor(this.context, Visit(expression.Left), Visit(expression.Right));
     }
 
     /// <summary>
-    /// Visitor method to translate <c>&amp;</c>, <c>|</c> and <c>^</c>, which C# uses for both
-    /// Boolean logic and integer bitwise arithmetic.
+    /// Translates <c>&amp;</c>, <c>|</c> and <c>^</c>, which C# uses for both Boolean logic and
+    /// integer bitwise arithmetic.
     /// </summary>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <param name="expression">Binary expression.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
     /// <param name="op">The C# operator, for the diagnostic when the operands are not Boolean.</param>
     /// <param name="build">Builds the Z3 term from two Boolean operands.</param>
     /// <returns>Z3 expression handle.</returns>
@@ -207,14 +221,14 @@ public static class ExpressionVisitor
     /// has no counterpart for, so it is rejected with a message that says so rather than an
     /// <see cref="InvalidCastException"/> from inside the cast.
     /// </remarks>
-    private static Expr VisitLogical(Context context, Environment environment, BinaryExpression expression, ParameterExpression param, string op, Func<Context, BoolExpr, BoolExpr, BoolExpr> build)
+    private Expr VisitLogical(BinaryExpression expression, string op, Func<Context, BoolExpr, BoolExpr, BoolExpr> build)
     {
-        Expr left = Visit(context, environment, expression.Left, param);
-        Expr right = Visit(context, environment, expression.Right, param);
+        Expr left = Visit(expression.Left);
+        Expr right = Visit(expression.Right);
 
         if (left is BoolExpr boolLeft && right is BoolExpr boolRight)
         {
-            return build(context, boolLeft, boolRight);
+            return build(this.context, boolLeft, boolRight);
         }
 
         throw new NotSupportedException(
@@ -222,35 +236,29 @@ public static class ExpressionVisitor
     }
 
     /// <summary>
-    /// Visitor method to translate a conditional (ternary <c>?:</c>) expression.
+    /// Translates a conditional (ternary <c>?:</c>) expression.
     /// </summary>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <param name="expression">Conditional expression.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
     /// <returns>Z3 expression handle.</returns>
     /// <remarks>
     /// Maps onto Z3's if-then-else term. The two branches must share a sort, which they do for
     /// any ternary the C# compiler accepts, since both arms are converted to a common type.
     /// </remarks>
-    private static Expr VisitConditional(Context context, Environment environment, ConditionalExpression expression, ParameterExpression param)
+    private Expr VisitConditional(ConditionalExpression expression)
     {
-        Expr test = Visit(context, environment, expression.Test, param);
-        Expr ifTrue = Visit(context, environment, expression.IfTrue, param);
-        Expr ifFalse = Visit(context, environment, expression.IfFalse, param);
+        Expr test = Visit(expression.Test);
+        Expr ifTrue = Visit(expression.IfTrue);
+        Expr ifFalse = Visit(expression.IfFalse);
 
-        return context.MkITE((BoolExpr)test, ifTrue, ifFalse);
+        return this.context.MkITE((BoolExpr)test, ifTrue, ifFalse);
     }
 
     /// <summary>
-    /// Visitor method to translate a method call expression.
+    /// Translates a method call expression.
     /// </summary>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <param name="call">Method call expression.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
     /// <returns>Z3 expression handle.</returns>
-    private static Expr VisitCall(Context context, Environment environment, MethodCallExpression call, ParameterExpression param)
+    private Expr VisitCall(MethodCallExpression call)
     {
         var method = call.Method;
 
@@ -280,7 +288,7 @@ public static class ExpressionVisitor
             }
 
             // Visit the rewritten expression.
-            return Visit(context, environment, result, param);
+            return Visit(result);
         }
 
         // Filter for known Z3 operators.
@@ -303,7 +311,7 @@ public static class ExpressionVisitor
                             var caller = (ICollection)ExpressionInterpreter.Instance.Interpret(callerToArrayMethodExp.Arguments[0]);
                             var arg = callerToArrayMethodExp.Arguments[1] as LambdaExpression;
                             var subExps = new List<Expression>(caller.Count);
-                                
+
                             foreach (var item in caller)
                             {
                                 var substitutedExpression = ParameterSubstituter.SubstituteParameter(arg, Expression.Constant(item));
@@ -339,10 +347,10 @@ public static class ExpressionVisitor
                 throw new NotSupportedException("Unsupported method call: " + method.ToString() + " with sub expression " + call.Arguments[0].ToString());
             }
 
-            IEnumerable<Expr> args = from Expression arg in distinctExps 
-                                        select Visit(context, environment, arg, param);
+            IEnumerable<Expr> args = from Expression arg in distinctExps
+                                     select Visit(arg);
 
-            return context.MkDistinct(args.ToArray());
+            return this.context.MkDistinct(args.ToArray());
         }
 
         if (method.Name.StartsWith("get_"))
@@ -357,7 +365,7 @@ public static class ExpressionVisitor
                 var args = call.Arguments;
                 var indexer = Expression.MakeIndex(target, propinfo, args);
 
-                return Visit(context, environment, indexer, param);
+                return Visit(indexer);
             }
         }
 
@@ -365,32 +373,26 @@ public static class ExpressionVisitor
     }
 
     /// <summary>
-    /// Visitor method to translate a constant expression.
+    /// Translates a constant value into a Z3 term.
     /// </summary>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="constant">Constant expression.</param>
+    /// <param name="val">The constant value.</param>
     /// <returns>Z3 expression handle.</returns>
-    private static Expr VisitConstant(Context context, ConstantExpression constant)
-    {
-        return VisitConstantValue(context, constant.Value!);
-    }
-
-    private static Expr VisitConstantValue(Context context, object val)
+    private Expr VisitConstantValue(object val)
     {
         switch (Type.GetTypeCode(val.GetType()))
         {
             case TypeCode.Int16:
             case TypeCode.Int32:
             case TypeCode.Int64:
-                return context.MkInt(Convert.ToInt64(val));
+                return this.context.MkInt(Convert.ToInt64(val));
             case TypeCode.Boolean:
-                return context.MkBool((bool)val);
+                return this.context.MkBool((bool)val);
             case TypeCode.Single:
             case TypeCode.Double:
             case TypeCode.Decimal:
                 // Invariant, not current: Z3's parser accepts only '.' as the decimal separator,
                 // and about half of all cultures render 1.5 as something else. See #52.
-                return context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture));
+                return this.context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture));
             case TypeCode.DateTime:
                 // A DateTime is encoded as its ticks - 100ns intervals from 0001-01-01 - on the UTC
                 // timeline, which covers the whole DateTime range. A Windows file time counted from
@@ -398,29 +400,26 @@ public static class ExpressionVisitor
                 //
                 // A Kind of Local is converted to UTC first; Unspecified is taken to be UTC already,
                 // which is the convention ToFileTimeUtc had and the read path inverts. See #56.
-                return context.MkInt(ToUtcTicks((DateTime)val));
+                return this.context.MkInt(ToUtcTicks((DateTime)val));
             case TypeCode.String:
-                return context.MkString((string)val);
+                return this.context.MkString((string)val);
             default:
                 throw new NotSupportedException($"Unsupported constant {val}");
         }
     }
 
-    private static Expr VisitIndex(Context context, Environment environment, IndexExpression expression, ParameterExpression param, Func<Context, Expr, Expr[], Expr> ctor)
+    private Expr VisitIndex(IndexExpression expression, Func<Context, Expr, Expr[], Expr> ctor)
     {
-        var args = expression.Arguments.Select(argExp => Visit(context, environment, argExp, param)).ToArray();
-        return ctor(context, Visit(context, environment, expression.Object!, param), args);
+        var args = expression.Arguments.Select(Visit).ToArray();
+        return ctor(this.context, Visit(expression.Object!), args);
     }
 
     /// <summary>
-    /// Visitor method to translate a member expression.
+    /// Translates a member expression - a symbol access on the environment, or a captured constant.
     /// </summary>
-    /// <param name="context">the Z3 context to manipulate</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <param name="member">Member expression.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
     /// <returns>Z3 expression handle.</returns>
-    private static Expr VisitMember(Context context, Environment environment, MemberExpression member, ParameterExpression param)
+    private Expr VisitMember(MemberExpression member)
     {
         // E.g. Symbols l = ...;
         //      theorem.Where(s => l.X1)
@@ -439,7 +438,7 @@ public static class ExpressionVisitor
 
         var topMember = hierarchy.First();
 
-        if (topMember.Expression != param)
+        if (topMember.Expression != this.param)
         {
             if ((topMember.Expression is ConstantExpression expression))
             {
@@ -465,13 +464,13 @@ public static class ExpressionVisitor
                         default:
                             throw new NotSupportedException($"Unsupported constant {target} .");
                     }
-                        
+
                     hierarchyIdx++;
                 }
 
                 if (val != null)
                 {
-                    return VisitConstantValue(context, val);
+                    return VisitConstantValue(val);
                 }
 
                 throw new NotSupportedException($"Could not reduce expression {topMember.Expression}");
@@ -481,7 +480,7 @@ public static class ExpressionVisitor
         // Only members we allow currently are direct accesses to the theorem's variables
         // in the environment type. So we just try to find the mapping from the environment
         // bindings table.
-        Environment subEnv = environment;
+        Environment subEnv = this.environment;
 
         foreach (var memberExpression in hierarchy)
         {
@@ -502,18 +501,16 @@ public static class ExpressionVisitor
     }
 
     /// <summary>
-    /// Visitor method to translate a unary expression.
+    /// Translates a unary expression, transforming the translated operand with <paramref name="ctor"/>.
     /// </summary>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <param name="expression">Unary expression.</param>
-    /// <param name="ctor">Constructor to combine recursive visitor results.</param>
-    /// <param name="param">Parameter used to express the constraint on.</param>
+    /// <param name="ctor">Combines the context and the recursively translated operand.</param>
     /// <returns>Z3 expression handle.</returns>
-    private static Expr VisitUnary(Context context, Environment environment, UnaryExpression expression, ParameterExpression param, Func<Context, Expr, Expr> ctor)
+    private Expr VisitUnary(UnaryExpression expression, Func<Context, Expr, Expr> ctor)
     {
-        return ctor(context, Visit(context, environment, expression.Operand, param));
+        return ctor(this.context, Visit(expression.Operand));
     }
+
     /// <summary>
     /// The ticks of <paramref name="value"/> on the UTC timeline, which is how a
     /// <see cref="DateTime"/> is encoded for Z3.

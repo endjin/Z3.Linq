@@ -183,7 +183,7 @@ public class Theorem
 
         AssertConstraints<T>(ctx, optimizer, environment);
 
-        var expression = ExpressionVisitor.Visit(ctx, environment, lambda.Body, lambda.Parameters[0]);
+        var expression = ExpressionVisitor.Translate(ctx, environment, lambda.Body, lambda.Parameters[0]);
 
         switch (direction)
         {
@@ -313,7 +313,7 @@ public class Theorem
         // Visit, assert and log.
         foreach (var constraint in constraintsToAssert)
         {
-            BoolExpr expression = (BoolExpr)ExpressionVisitor.Visit(context, environment, constraint.Body, constraint.Parameters[0]);
+            BoolExpr expression = (BoolExpr)ExpressionVisitor.Translate(context, environment, constraint.Body, constraint.Parameters[0]);
 
             switch (approach)
             {
