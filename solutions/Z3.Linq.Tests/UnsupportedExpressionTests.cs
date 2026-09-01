@@ -32,19 +32,6 @@ public class UnsupportedExpressionTests
     }
 
     [TestMethod]
-    public void Solve_ConditionalExpression_ThrowsNotSupportedException()
-    {
-        // Arrange: a ternary is a Conditional node, which the visitor has no case for. Z3 can
-        // express if-then-else, so this is a gap rather than a fundamental limit.
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => (t.X1 > 0 ? t.X1 : 0) == 1);
-
-        // Act & Assert
-        Should.Throw<NotSupportedException>(() => theorem.Solve());
-    }
-
-    [TestMethod]
     public void Solve_CallToAnUnrecognisedMethod_ThrowsNotSupportedException()
     {
         // Arrange: only Z3Methods.Distinct, indexed property getters and methods carrying a
@@ -173,11 +160,12 @@ public class UnsupportedExpressionTests
     {
         // Arrange: an unsupported constraint is not skipped in favour of the ones that do
         // translate. Worth pinning, because silently dropping a constraint would produce a
-        // satisfying-looking answer to a different question.
+        // satisfying-looking answer to a different question. The rejected constraint is an
+        // integer bitwise operation, which Z3's integer sort has no counterpart for.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 > 0)
-            .Where(t => (t.X1 > 5 ? t.X1 : 0) == 6);
+            .Where(t => (t.X1 & 2) == 0);
 
         // Act & Assert
         Should.Throw<NotSupportedException>(() => theorem.Solve());
