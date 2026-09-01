@@ -8,9 +8,10 @@ namespace Z3.Linq.Tests;
 /// <para>
 /// A collection symbol is declared as a Z3 array from <c>Int</c> to the element type's sort -
 /// the same sort a scalar of that type gets, from the one mapping the two share. Elements are
-/// always read back with an integer index, and the number read is the <c>Count</c> of the
-/// collection already on the instance - so an environment must pre-size its collections, and a
-/// solution never changes their length.
+/// always read back with an integer index, and the number read is the <c>Count</c> of a
+/// collection that already exists - so an environment must pre-size its collections, on the
+/// type or on the instance passed to <c>NewTheorem</c>, and a solution never changes their
+/// length.
 /// </para>
 /// <para>
 /// Every element type a scalar supports now round-trips through a collection too. Until #64
@@ -29,8 +30,11 @@ namespace Z3.Linq.Tests;
 /// </para>
 /// <para>
 /// A collection symbol can be a property or a public field, and since #53 the two behave
-/// identically. A collection the environment leaves null throws either way, which is #78 - and
-/// unavoidable for a ValueTuple, whose elements are fields it has no way to pre-size.
+/// identically. Its length comes from an instance: the one passed to <c>NewTheorem</c>, which
+/// is the template for the solution, or failing that the type's own initialiser. A collection
+/// with neither is rejected by name (#78). The template is what lets a value tuple or an
+/// anonymous type carry a collection at all - neither has anywhere to put an initialiser, so it
+/// is the only place a length can come from.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -840,61 +844,259 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#78): a collection that is null on a freshly constructed environment throws
-    /// <see cref="NullReferenceException"/>.
+    /// A collection with no length anywhere is rejected by name.
     /// </summary>
     /// <remarks>
-    /// The count is read straight off the value the member holds, with no null check, so an
-    /// environment that declares a collection without initialising it fails with nothing naming
-    /// the member at fault. This predates #53 - the property form below has always behaved this
-    /// way - so fixing #53 gave fields the same behaviour rather than introducing it.
-    /// These tests pin current behaviour and must be updated when the defect is fixed.
+    /// The diagnostic half of #78. The count used to be read straight off the value the member
+    /// held, with no null check, so an environment that declared a collection without
+    /// initialising it failed with a bare <see cref="NullReferenceException"/> and nothing naming
+    /// the member at fault. It now says which collection, and what to do about it. This predates
+    /// #53 - the property form below has always behaved this way - so fixing #53 gave fields the
+    /// same behaviour rather than introducing it.
     /// </remarks>
     [TestMethod]
-    public void Solve_NullCollectionInAPublicField_ThrowsNullReferenceException()
+    public void Solve_NullCollectionInAPublicField_ThrowsNotSupportedExceptionNamingIt()
     {
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<NullFieldCollectionEnvironment>();
 
-        // Act & Assert
-        Should.Throw<NullReferenceException>(() => theorem.Solve());
+        // Act
+        NotSupportedException exception = Should.Throw<NotSupportedException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldStartWith("Collection symbol Values has no length");
+        exception.Message.ShouldContain("pre-sized");
     }
 
-    /// <summary>
-    /// KNOWN DEFECT (#78). The property form, which behaved this way before #53 was fixed too.
-    /// </summary>
     [TestMethod]
-    public void Solve_NullCollectionInAPublicProperty_ThrowsNullReferenceException()
+    public void Solve_NullCollectionInAPublicProperty_ThrowsNotSupportedExceptionNamingIt()
     {
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<NullPropertyCollectionEnvironment>();
 
-        // Act & Assert
-        Should.Throw<NullReferenceException>(() => theorem.Solve());
+        // Act
+        NotSupportedException exception = Should.Throw<NotSupportedException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldStartWith("Collection symbol Values has no length");
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#78): a collection in a tuple environment can never work.
+    /// With several collections, the message names the one without a length.
     /// </summary>
     /// <remarks>
-    /// A <c>ValueTuple</c> exposes its elements as public fields, so a tuple environment takes the
-    /// branch #53 fixed. It still cannot hold a collection: the length comes from the instance,
-    /// the instance is created with <c>Activator.CreateInstance</c>, and a tuple has nowhere to
-    /// put an initialiser - so the element is always null. #78 is structural for tuples rather
-    /// than a matter of remembering to initialise something.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// The point of naming the member: #78 observed that in an environment with several
+    /// collections nothing said which one was at fault. The template sizes <c>A</c> and leaves
+    /// <c>B</c> null, and the message has to say <c>B</c>.
     /// </remarks>
     [TestMethod]
-    public void Solve_CollectionInAValueTupleEnvironment_ThrowsNullReferenceException()
+    public void Solve_TwoCollectionsWithOneUnsized_NamesTheUnsizedOne()
     {
         // Arrange
         using var context = new Z3Context();
+        var theorem = context.NewTheorem(new TwoNullCollectionsEnvironment { A = new int[1] })
+            .Where(t => t.A![0] == 1);
+
+        // Act
+        NotSupportedException exception = Should.Throw<NotSupportedException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldStartWith("Collection symbol B has no length");
+    }
+
+    /// <summary>
+    /// A collection in a value tuple environment is sized by the template passed to
+    /// <c>NewTheorem</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The structural half of #78. A <c>ValueTuple</c> exposes its elements as public fields, so
+    /// a tuple environment takes the branch #53 fixed - but the solution instance is created
+    /// with <c>Activator.CreateInstance</c>, and a tuple has nowhere to put an initialiser, so
+    /// the element was always null and nothing the caller wrote could change that.
+    /// </para>
+    /// <para>
+    /// The instance passed to <c>NewTheorem</c> is now the template for the solution: a
+    /// collection symbol takes its length from the corresponding collection on the template.
+    /// That parameter existed already, was named <c>dummy</c>, and was discarded.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_CollectionInAValueTupleEnvironment_IsSizedByTheTemplate()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem((Values: new int[2], Other: 0))
+            .Where(t => t.Values[0] == 3)
+            .Where(t => t.Values[1] == 4)
+            .Where(t => t.Other == 1)
+            .Solve();
+
+        // Assert
+        result.Values.ShouldBe([3, 4]);
+        result.Other.ShouldBe(1);
+    }
+
+    [TestMethod]
+    public void Solve_CollectionInAValueTupleEnvironmentWithoutATemplate_ThrowsNotSupportedException()
+    {
+        // Arrange: the type-only overload has no instance to read a length from, and a tuple
+        // cannot supply one itself. The tuple's fields are Item1 and Item2 at runtime, whatever
+        // the source called them.
+        using var context = new Z3Context();
         var theorem = context.NewTheorem<(int[] Values, int Other)>().Where(t => t.Other == 1);
 
-        // Act & Assert
-        Should.Throw<NullReferenceException>(() => theorem.Solve());
+        // Act
+        NotSupportedException exception = Should.Throw<NotSupportedException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldStartWith("Collection symbol Item1 has no length");
+    }
+
+    [TestMethod]
+    public void Solve_NullCollectionProperty_IsSizedByTheTemplate()
+    {
+        // Arrange: a class that declares the collection but never initialises it, sized by the
+        // instance passed in rather than by an initialiser on the type.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new NullPropertyCollectionEnvironment { Values = new int[3] })
+            .Where(t => t.Values![2] == 9)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(3);
+        result.Values[2].ShouldBe(9);
+    }
+
+    [TestMethod]
+    public void Solve_NullGenericCollection_IsSizedByTheTemplate()
+    {
+        // Arrange: the generic-collection branch reads the same length and rebuilds through the
+        // constructor, so a List is sized the same way.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new NullListCollectionEnvironment { Values = [0, 0] })
+            .Where(t => t.Values![1] == 7)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldNotBeNull();
+        result.Values.Count.ShouldBe(2);
+        result.Values[1].ShouldBe(7);
+    }
+
+    /// <summary>
+    /// The template is followed into nested objects.
+    /// </summary>
+    /// <remarks>
+    /// The recursion that marshals a nested environment carries the corresponding member of the
+    /// template alongside it, so a collection two levels down is sized by the collection two
+    /// levels down on the instance passed in.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_NullCollectionInANestedObject_IsSizedByTheTemplate()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var template = new NestedNullCollectionEnvironment { Inner = new NullCollectionHolder { Values = new int[2] } };
+
+        // Act
+        var result = context.NewTheorem(template)
+            .Where(t => t.Inner.Values![0] == 3)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Inner.Values.ShouldNotBeNull();
+        result.Inner.Values.Length.ShouldBe(2);
+        result.Inner.Values[0].ShouldBe(3);
+    }
+
+    /// <summary>
+    /// A template beats the type's own initialiser.
+    /// </summary>
+    /// <remarks>
+    /// <c>IntArrayEnvironment</c> initialises its collection to three elements; the instance
+    /// passed in has five. The caller who passes an instance has said what they want more
+    /// directly than the type has, so the template wins. Without a template the initialiser
+    /// applies, as every test using the type-only overload shows.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_TemplateCollection_TakesPrecedenceOverTheInitialiser()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new IntArrayEnvironment { Values = new int[5] })
+            .Where(t => t.Values[4] == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(5);
+        result.Values[4].ShouldBe(1);
+    }
+
+    /// <summary>
+    /// Only the template's lengths are used; its element values do not reach the solution, and
+    /// the template itself is not written to.
+    /// </summary>
+    [TestMethod]
+    public void Solve_TemplateElementValues_DoNotReachTheSolution()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var template = new NullPropertyCollectionEnvironment { Values = [99, 99] };
+
+        // Act
+        var result = context.NewTheorem(template)
+            .Where(t => t.Values![0] == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldNotBeNull();
+        result.Values[0].ShouldBe(1);
+        result.Values.ShouldNotBeSameAs(template.Values);
+        template.Values.ShouldBe([99, 99]);
+    }
+
+    /// <summary>
+    /// The template survives <c>Where</c> and <c>OrderBy</c>.
+    /// </summary>
+    /// <remarks>
+    /// Each <c>Where</c> builds a new theorem, and <c>OrderBy</c> defers to a separate solve
+    /// through the optimiser, so the template has to be carried through both. Every templated
+    /// test here goes through <c>Where</c>; this is the only one that reads a collection back
+    /// through the optimiser, so a version that forgot the template on that path would pass
+    /// every other test in this file.
+    /// </remarks>
+    [TestMethod]
+    public void OrderByDescending_OnATemplatedTheorem_KeepsTheTemplate()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem((Values: new int[2], Other: 0))
+            .Where(t => t.Values[0] > 0)
+            .Where(t => t.Values[0] < 10)
+            .OrderByDescending(t => t.Values[0])
+            .Solve();
+
+        // Assert
+        result.Values[0].ShouldBe(9);
     }
 
     /// <summary>
@@ -1102,5 +1304,27 @@ public class CollectionSymbolTests
     private sealed class NullPropertyCollectionEnvironment
     {
         public int[]? Values { get; set; }
+    }
+
+    private sealed class NullListCollectionEnvironment
+    {
+        public List<int>? Values { get; set; }
+    }
+
+    private sealed class TwoNullCollectionsEnvironment
+    {
+        public int[]? A { get; set; }
+
+        public int[]? B { get; set; }
+    }
+
+    private sealed class NullCollectionHolder
+    {
+        public int[]? Values { get; set; }
+    }
+
+    private sealed class NestedNullCollectionEnvironment
+    {
+        public NullCollectionHolder Inner { get; set; } = new();
     }
 }

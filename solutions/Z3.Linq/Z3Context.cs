@@ -52,23 +52,39 @@ public sealed class Z3Context : IDisposable
     }
 
     /// <summary>
-    /// Creates a new theorem based on a skeleton object used to infer the environment
-    /// type with the variables constrained by the theorem.
-    ///
-    /// This overload is useful if one wants to use an anonymous type "on the fly" to
-    /// create a new theorem based on the type's properties as variables.
+    /// Creates a new theorem from a template instance, which supplies the environment type and
+    /// the length of any collection symbols in it.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The type is inferred from the instance, which is what lets an anonymous type be used as
+    /// an environment "on the fly". The instance is also the template for the solution: a
+    /// collection symbol takes its length from the corresponding collection on the template,
+    /// because a solution never changes a collection's length and has to get it from somewhere.
+    /// That is what lets a value tuple or an anonymous type - neither of which has anywhere to
+    /// put an initialiser - hold a collection at all. Where the type has an initialiser of its
+    /// own the template still wins. See #78.
+    /// </para>
+    /// <para>
+    /// Nothing else about the template is read. Its values do not constrain the theorem and do
+    /// not reach the solution, and it is never written to.
+    /// </para>
+    /// </remarks>
     /// <example>
     /// <code>
     /// ctx.NewTheorem(new { x = default(int), y = default(int) }).Where(t => t.x > t.y)
+    /// ctx.NewTheorem((Values: new int[3], Total: 0)).Where(t => t.Values[0] + t.Values[1] + t.Values[2] == t.Total)
     /// </code>
     /// </example>
     /// <typeparam name="T">Theorem environment type (typically inferred).</typeparam>
-    /// <param name="dummy">Dummy parameter, typically an anonymous type instance.</param>
+    /// <param name="template">
+    /// An instance of the environment type. Its collections give the solution's their length;
+    /// nothing else about it is used.
+    /// </param>
     /// <returns>New theorem object based on the given environment.</returns>
-    public Theorem<T> NewTheorem<T>(T dummy)
+    public Theorem<T> NewTheorem<T>(T template)
     {
-        return new Theorem<T>(this);
+        return new Theorem<T>(this, template);
     }
 
     /// <summary>
