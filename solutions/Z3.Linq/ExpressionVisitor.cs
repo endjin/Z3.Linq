@@ -1,6 +1,7 @@
 ﻿namespace Z3.Linq;
  
 using System.Collections;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -301,7 +302,9 @@ public static class ExpressionVisitor
             case TypeCode.Single:
             case TypeCode.Double:
             case TypeCode.Decimal:
-                return context.MkReal(val.ToString());
+                // Invariant, not current: Z3's parser accepts only '.' as the decimal separator,
+                // and about half of all cultures render 1.5 as something else. See #52.
+                return context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture));
             case TypeCode.DateTime:
                 return context.MkInt(((DateTime)val).ToFileTimeUtc());
             case TypeCode.String:
