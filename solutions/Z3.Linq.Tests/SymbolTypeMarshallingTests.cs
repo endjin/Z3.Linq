@@ -23,6 +23,12 @@ using System.Threading;
 [TestClass]
 public class SymbolTypeMarshallingTests
 {
+    /// <summary>
+    /// How long to wait for a solve running on a dedicated thread. Generous by design - it
+    /// exists to turn a hang into a failure, not to police how long a solve should take.
+    /// </summary>
+    private static readonly TimeSpan SolveTimeout = TimeSpan.FromSeconds(30);
+
     [TestMethod]
     [DataRow(0, DisplayName = "Zero")]
     [DataRow(42, DisplayName = "Positive")]
@@ -314,7 +320,11 @@ public class SymbolTypeMarshallingTests
 
         // Act
         thread.Start();
-        thread.Join();
+
+        // Bounded, so that a solver that never returns fails this test rather than hanging the
+        // whole run with no indication of which test stopped. The work itself takes single-digit
+        // milliseconds, so the limit is enormous slack rather than a tuned value.
+        thread.Join(SolveTimeout).ShouldBeTrue("the solve on the de-DE thread did not finish");
 
         // Assert
         captured.ShouldBeOfType<Microsoft.Z3.Z3Exception>();
@@ -343,7 +353,7 @@ public class SymbolTypeMarshallingTests
 
         // Act
         thread.Start();
-        thread.Join();
+        thread.Join(SolveTimeout).ShouldBeTrue("the solve on the invariant-culture thread did not finish");
 
         // Assert
         value.ShouldBe(1.5);
