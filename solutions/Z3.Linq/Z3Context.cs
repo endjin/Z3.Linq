@@ -179,7 +179,12 @@ public sealed class Z3Context : IDisposable
 
         if (this.timeout is { } t)
         {
-            limits.Add("timeout", (uint)t.TotalMilliseconds);
+            // Round up, not truncate: Z3's timeout is in whole milliseconds, and a positive
+            // TimeSpan below one millisecond truncates to 0, which Z3 reads as "no timeout" - so
+            // a caller who asked for a tiny timeout would silently get none. Ceiling keeps any
+            // positive timeout at least one millisecond, and stays within uint (the setter bounds
+            // the value at uint.MaxValue milliseconds).
+            limits.Add("timeout", (uint)Math.Ceiling(t.TotalMilliseconds));
         }
 
         if (this.resourceLimit is { } r)

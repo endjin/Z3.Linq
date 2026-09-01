@@ -238,7 +238,10 @@ public class Theorem
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        Params? limits = this.context.CreateLimits(ctx);
+        // Disposed when this method returns, after the check has run: Params is native-backed, and
+        // the solver has copied what it needs by the time Check completes. A null (no limits set)
+        // is a no-op to dispose.
+        using Params? limits = this.context.CreateLimits(ctx);
 
         switch (approach)
         {
