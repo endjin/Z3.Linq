@@ -358,4 +358,122 @@ public class SymbolTypeMarshallingTests
         // Assert
         value.ShouldBe(1.5);
     }
+
+    /// <summary>
+    /// An unconstrained <c>long</c> symbol is populated rather than throwing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The tests above pin what each type does with a value; these five pin what each does with
+    /// no value at all. Every type takes a different arm of the marshalling switch, so each can
+    /// regress on its own, and all but <c>bool</c> threw before #51. The value a free symbol
+    /// comes back with is supplied by model completion and is deliberately not asserted.
+    /// </para>
+    /// <para>
+    /// <c>short</c> and <c>float</c> are absent on purpose: an unconstrained one now evaluates
+    /// cleanly and then fails at the reflection write, which is #63 and #54 respectively rather
+    /// than anything to do with completion. Their pins above are unchanged.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_UnconstrainedLongSymbol_ReturnsAResult()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<long, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
+
+    [TestMethod]
+    public void Solve_UnconstrainedDoubleSymbol_ReturnsAResult()
+    {
+        // Arrange: the real-sorted counterpart. An uninterpreted real came back as a RealExpr
+        // rather than a RatNum, so this arm failed on a different cast to the integer ones.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<double, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
+
+    [TestMethod]
+    public void Solve_UnconstrainedDecimalSymbol_ReturnsAResult()
+    {
+        // Arrange: decimal shares the real sort with double but has its own read-back, with
+        // trailing-'?' trimming and a decimal.Parse, so it is worth its own case.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<decimal, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
+
+    /// <summary>
+    /// An unconstrained <c>string</c> symbol is populated rather than throwing.
+    /// </summary>
+    /// <remarks>
+    /// The one member of this group that did not fail with an <see cref="InvalidCastException"/>.
+    /// Strings are read with <c>Expr.String</c> rather than a cast, so an uninterpreted symbol
+    /// produced <c>Z3Exception: expression is not a string literal</c> instead. Same cause, and
+    /// fixed by the same change.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_UnconstrainedStringSymbol_ReturnsAResult()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<string, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
+
+    /// <summary>
+    /// An unconstrained <c>bool</c> symbol is populated - as it always was.
+    /// </summary>
+    /// <remarks>
+    /// The quiet half of #51, and the reason it went unnoticed for so long. Booleans are read
+    /// with <c>Expr.IsTrue</c>, which is simply <c>false</c> for any term that is not literally
+    /// true - including an uninterpreted symbol. So a free bool never threw; it silently
+    /// returned <c>false</c> whether or not the model said anything about it. This test passes
+    /// on both sides of the fix and is here to hold that branch still, not to prove the fix.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_UnconstrainedBoolSymbol_ReturnsAResult()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<bool, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
 }
