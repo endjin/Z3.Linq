@@ -234,7 +234,6 @@ public class EnvironmentTypeTests
         var result = context.NewTheorem<OuterEnvironment>()
             .Where(t => t.Inner.A == t.Top * 2)
             .Where(t => t.Top == 5)
-            .Where(t => t.Inner.B == 0)
             .Solve();
 
         // Assert

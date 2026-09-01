@@ -68,8 +68,7 @@ public class TheoremCompositionTests
         // child's extra constraint did not leak backwards.
         using var context = new Z3Context();
         var parent = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => t.X1 == 3)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 == 3);
         var child = parent.Where(t => t.X1 == 4);
 
         // Act
@@ -137,7 +136,6 @@ public class TheoremCompositionTests
         // Act
         var result = (from t in context.NewTheorem<Symbols<int, int>>()
                       where t.X1 == 1
-                      where t.X2 == 0
                       select t).Solve();
 
         // Assert
@@ -159,7 +157,6 @@ public class TheoremCompositionTests
 
         var result = (from t in context.NewTheorem<Symbols<int, int>>()
                       where t.X1 == 11
-                      where t.X2 == 0
                       select t).Solve();
 
         // Assert
