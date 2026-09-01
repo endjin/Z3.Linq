@@ -217,7 +217,6 @@ public class CollectionSymbolTests
     /// is where the three tests below observe the #55 fix.
     /// This test pins current behaviour and must be updated when the defect is fixed.
     /// </remarks>
-    /// </remarks>
     [TestMethod]
     public void Solve_DecimalArraySymbol_ThrowsZ3Exception()
     {
