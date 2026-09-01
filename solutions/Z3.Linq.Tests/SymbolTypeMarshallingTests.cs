@@ -184,7 +184,7 @@ public class SymbolTypeMarshallingTests
     /// KNOWN DEFECT (#54): a float symbol solves but cannot be marshalled back.
     /// </summary>
     /// <remarks>
-    /// TypeCode.Single parses the model value into a double (Theorem.cs:527) and then writes it
+    /// TypeCode.Single parses the model value into a double (Theorem.cs:530) and then writes it
     /// to a float property, which reflection rejects. Note this fails later than short does -
     /// translation and solving both succeed, so only the result is lost.
     /// This test pins current behaviour and must be updated when the defect is fixed.

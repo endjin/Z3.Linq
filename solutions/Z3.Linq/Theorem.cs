@@ -435,8 +435,11 @@ public class Theorem
 
                 int existingLength = parameter switch
                 {
-                    PropertyInfo info => ((ICollection)info.GetValue(destinationObject, null)!).Count,
-                    FieldInfo info1 => ((ICollection)info1).Count,
+                    // Both branches read the value the member holds on the instance. The field
+                    // branch used to cast the FieldInfo itself, which no environment could
+                    // satisfy - see #53.
+                    PropertyInfo property => ((ICollection)property.GetValue(destinationObject, null)!).Count,
+                    FieldInfo field => ((ICollection)field.GetValue(destinationObject)!).Count,
                     _ => 0
                 };
 
