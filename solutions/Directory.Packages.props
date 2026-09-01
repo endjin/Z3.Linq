@@ -5,10 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup Label="Third party">
-    <!-- NOTE: pinned to 1.2.0 deliberately. 1.3.x removes the general
-         PartialEval(Expression, IExpressionEvaluator) overload, leaving only a
-         LambdaExpression-constrained generic, which ExpressionVisitor.cs relies on. -->
-    <PackageVersion Include="MiaPlaza.ExpressionUtils" Version="1.2.0" />
+    <PackageVersion Include="MiaPlaza.ExpressionUtils" Version="1.3.1" />
     <!-- NOTE: 4.12.2 is the newest Microsoft.Z3 published to nuget.org; later Z3
          releases ship via GitHub releases only. -->
     <PackageVersion Include="Microsoft.Z3" Version="4.12.2" />
