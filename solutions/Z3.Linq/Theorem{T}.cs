@@ -136,17 +136,23 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// </summary>
     /// <typeparam name="TResult">Type of the value being minimized.</typeparam>
     /// <param name="lambda">Expression representing the value to minimize.</param>
-    /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
+    /// <returns>
+    /// A deferred minimization. Nothing reaches Z3 until <see cref="ISolveable{T}.Solve"/> or
+    /// <see cref="ISolveable{T}.TrySolve(out T)"/> is called on the result.
+    /// </returns>
     public ISolveable<T> OrderBy<TResult>(Expression<Func<T, TResult>> lambda)
         => new DeferredSolvable(() =>
             TryOptimize(Optimization.Minimize, lambda, out T? solution) ? (true, solution) : (false, default));
 
     /// <summary>
-    /// OrderBy query operator, used to optimize a solution using query expression syntax.
+    /// OrderByDescending query operator, used to optimize a solution using query expression syntax.
     /// </summary>
     /// <typeparam name="TResult">Type of the value being maximized.</typeparam>
     /// <param name="lambda">Expression representing the value to maximize.</param>
-    /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
+    /// <returns>
+    /// A deferred maximization. Nothing reaches Z3 until <see cref="ISolveable{T}.Solve"/> or
+    /// <see cref="ISolveable{T}.TrySolve(out T)"/> is called on the result.
+    /// </returns>
     public ISolveable<T> OrderByDescending<TResult>(Expression<Func<T, TResult>> lambda)
         => new DeferredSolvable(() =>
             TryOptimize(Optimization.Maximize, lambda, out T? solution) ? (true, solution) : (false, default));
