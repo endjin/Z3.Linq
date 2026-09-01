@@ -49,7 +49,7 @@ task . FullBuild
 # task PostInit {}
 # task PreVersion {}
 # task PostVersion {}
-# task PreBuild {}
+task PreBuild EnsureZ3Package
 # task PostBuild {}
 # task PreTest {}
 # task PostTest {}
@@ -62,3 +62,12 @@ task . FullBuild
 # task PrePublish {}
 # task PostPublish {}
 # task RunLast {}
+
+#
+# Microsoft.Z3 is not available on nuget.org (see scripts/Install-Z3Package.ps1), so the
+# package has to be in the local folder feed before anything restores. PreBuild is the last
+# extensibility point that runs ahead of the RestorePackages task.
+#
+task EnsureZ3Package {
+    & (Join-Path $here "scripts/Install-Z3Package.ps1")
+}
