@@ -703,7 +703,7 @@ public class Theorem
     /// interpretation for.
     /// </summary>
     /// <param name="model">Z3 model to evaluate under.</param>
-    /// <param name="expr">Term to evaluate.</param>
+    /// <param name="expr">Term to evaluate. Nullable by necessity - see the remarks.</param>
     /// <returns>The model value of <paramref name="expr"/>.</returns>
     /// <remarks>
     /// <para>
@@ -719,6 +719,17 @@ public class Theorem
     /// completion is enabled and Z3 supplies one. Completion only fills gaps - it never
     /// overrides a value the solver chose - so symbols the model does interpret are
     /// unaffected. See https://github.com/endjin/Z3.Linq/issues/51.
+    /// </para>
+    /// <para>
+    /// <paramref name="expr"/> is nullable because <c>Environment.Expr</c> is, and the
+    /// anonymous-type branch of <c>GetSolution</c> passes it without the guard the three sites
+    /// in <c>ConvertZ3Expression</c> use. A null reaches Microsoft.Z3 and surfaces as a
+    /// <c>NullReferenceException</c> - reachable today with an anonymous environment holding a
+    /// nested object, and tracked by https://github.com/endjin/Z3.Linq/issues/75. Declaring the
+    /// parameter nullable states that honestly; a non-nullable one would need a suppression or
+    /// a new guard here, and either would change behaviour that this change deliberately leaves
+    /// alone. Issue 75 proposes the better fix - checking the property type before evaluating,
+    /// so the existing <c>NotSupportedException</c> fires and names the property.
     /// </para>
     /// </remarks>
     private static Expr EvaluateWithCompletion(Model model, Expr? expr)
