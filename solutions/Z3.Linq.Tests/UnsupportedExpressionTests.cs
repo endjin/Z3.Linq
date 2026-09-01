@@ -59,16 +59,24 @@ public class UnsupportedExpressionTests
         Should.Throw<NotSupportedException>(() => theorem.Solve());
     }
 
+    /// <summary>
+    /// A cast to a type the sort mapping does not know falls through to the catch-all.
+    /// </summary>
+    /// <remarks>
+    /// This pinned <c>(long)t.X1</c> until #76, when the Convert case chose by target type and
+    /// had no arm for <c>long</c>. Conversions are now decided by the sorts involved, using the
+    /// same mapping the symbols are declared with, so what is unsupported is a target type that
+    /// mapping has no row for - <c>byte</c> here. Note this one is NotImplementedException
+    /// rather than NotSupportedException - the throw sites are not consistent about which they
+    /// use.
+    /// </remarks>
     [TestMethod]
-    public void Solve_UnsupportedCast_ThrowsNotImplementedException()
+    public void Solve_CastToAnUnmappedType_ThrowsNotImplementedException()
     {
-        // Arrange: the Convert case handles conversions to double, int and char only. Widening
-        // an int symbol to long is unremarkable C# but has no case, so it falls through to the
-        // catch-all (ExpressionVisitor.cs:141). Note this one is NotImplementedException rather
-        // than NotSupportedException - the throw sites are not consistent about which they use.
+        // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => (long)t.X1 == 1L);
+            .Where(t => (byte)t.X1 == 1);
 
         // Act & Assert
         Should.Throw<NotImplementedException>(() => theorem.Solve());
