@@ -355,3 +355,5 @@ MigrationBackup/
 _codeCoverage/
 _packages/
 *.sbom.*
+# Local publish output for Polyglot repro notebooks (dotnet publish -o .deploy)
+.deploy/

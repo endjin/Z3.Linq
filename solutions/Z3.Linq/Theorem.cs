@@ -2,6 +2,9 @@
  
 using Microsoft.Z3;
 
+using MiaPlaza.ExpressionUtils;
+using MiaPlaza.ExpressionUtils.Evaluating;
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -163,7 +166,16 @@ public class Theorem
         // Visit, assert and log.
         foreach (var constraint in constraintsToAssert)
         {
-            BoolExpr expression = (BoolExpr)ExpressionVisitor.Visit(context, environment, constraint.Body, constraint.Parameters[0]);
+            // Partially evaluate the constraint body before visiting. This folds host-captured
+            // constants (locals declared outside the theorem's parameter scope, e.g. in another
+            // .NET Interactive "submission" or closure) into literal ConstantExpressions, which
+            // sidesteps the reflective MemberExpression resolution in ExpressionVisitor.VisitMember
+            // that crashes across dynamic-assembly boundaries -- see issue #2:
+            // "Field 'X' defined on type 'Submission#N' is not a field on the target object of
+            // type 'Submission#M'". Subtrees that reference the theorem parameter (e.g. t.Values[i])
+            // are left untouched because they are not evaluable without a parameter binding.
+            var body = PartialEvaluator.PartialEval(constraint.Body, ExpressionInterpreter.Instance);
+            BoolExpr expression = (BoolExpr)ExpressionVisitor.Visit(context, environment, body, constraint.Parameters[0]);
 
             switch (approach)
             {
