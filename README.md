@@ -161,8 +161,10 @@ Then you can copy any of the above samples.
 
 ### For Visual Studio
 
-Add the `Z3.Linq` package.
-Configure your application to [target x64 platform](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022). This is a requirement as `Z3.Linq` uses the [Microsoft.Z3](https://www.nuget.org/packages/Microsoft.Z3/) package.
+Add the `Z3.Linq` package. No platform target is needed: `Microsoft.Z3` supplies native binaries for x64 and arm64 on Windows, Linux and macOS, and the default `AnyCPU` resolves the right one.
+
+> [!NOTE]
+> This applies from the next release onwards. The versions published so far depend on `Microsoft.Z3` 4.12.2 - the newest build on nuget.org - which ships native binaries for `win-x64` and `osx-x64` only. On Linux or arm64 those versions restore successfully and then throw `DllNotFoundException` on the first solve, so they do need [an x64 platform target](https://docs.microsoft.com/en-us/visualstudio/ide/how-to-configure-projects-to-target-platforms?view=vs-2022) on Windows or macOS. Releases are paused until Z3 publishes a current build to nuget.org - see [#60](https://github.com/endjin/Z3.Linq/issues/60).
 
 ## Contributing
 

@@ -1,0 +1,3 @@
+This folder is the local NuGet feed that scripts/Install-Z3Package.ps1 populates with the
+Microsoft.Z3 package, which is not available on nuget.org. The folder is committed (and the
+packages themselves ignored) because NuGet requires a configured local source to exist.
