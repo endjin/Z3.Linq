@@ -71,6 +71,8 @@ public class OptimizationTests
         var maximum = theorem.Optimize(Optimization.Maximize, t => t.X1);
 
         // Assert
+        minimum.ShouldNotBeNull();
+        maximum.ShouldNotBeNull();
         minimum.X1.ShouldBe(5);
         maximum.X1.ShouldBe(9);
         minimum.X1.ShouldBeLessThan(maximum.X1);
@@ -91,6 +93,7 @@ public class OptimizationTests
         var viaOrderBy = theorem.OrderBy(t => t.X1).Solve();
 
         // Assert
+        viaOptimize.ShouldNotBeNull();
         viaOrderBy.ShouldNotBeNull();
         viaOrderBy.X1.ShouldBe(viaOptimize.X1);
         viaOrderBy.X1.ShouldBe(3);
@@ -110,6 +113,7 @@ public class OptimizationTests
         var viaOrderBy = theorem.OrderByDescending(t => t.X1).Solve();
 
         // Assert
+        viaOptimize.ShouldNotBeNull();
         viaOrderBy.ShouldNotBeNull();
         viaOrderBy.X1.ShouldBe(viaOptimize.X1);
         viaOrderBy.X1.ShouldBe(8);
@@ -223,6 +227,8 @@ public class OptimizationTests
         var maximised = theorem.Optimize(Optimization.Maximize, t => t.X1);
 
         // Assert
+        minimised.ShouldNotBeNull();
+        maximised.ShouldNotBeNull();
         minimised.X1.ShouldBe(5);
         maximised.X1.ShouldBe(100);
     }
@@ -243,6 +249,8 @@ public class OptimizationTests
         var solved = theorem.Solve();
 
         // Assert
+        first.ShouldNotBeNull();
+        second.ShouldNotBeNull();
         first.X1.ShouldBe(1);
         second.X1.ShouldBe(1);
 
@@ -266,19 +274,17 @@ public class OptimizationTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#58): an unsatisfiable optimisation returns null through a signature that
-    /// promises it will not.
+    /// An unsatisfiable optimisation returns null through a signature that says so.
     /// </summary>
     /// <remarks>
-    /// <c>Solve</c> returns <c>T?</c> and callers are expected to check it, but <c>Optimize</c>
-    /// returns a non-nullable <c>T</c> while returning <c>default!</c> when the status is not
-    /// SATISFIABLE (Theorem.cs:126). For a reference environment type that is a null the
-    /// compiler has been told cannot happen, so the caller dereferences it and gets a
-    /// <see cref="NullReferenceException"/> far from the cause.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// <c>Optimize</c> returned <c>default!</c> through a non-nullable <c>T</c> until #58 - for a
+    /// reference environment, a null the compiler had been told could not happen, so the caller
+    /// dereferenced it and got a <see cref="NullReferenceException"/> far from the cause. The
+    /// value has not changed; what changed is that the declaration now admits it, which turned
+    /// ten unchecked dereferences across six tests in this very file into compiler errors.
     /// </remarks>
     [TestMethod]
-    public void Optimize_WithUnsatisfiableTheorem_ReturnsNullDespiteNonNullableSignature()
+    public void Optimize_WithUnsatisfiableTheorem_ReturnsNull()
     {
         // Arrange: a direct contradiction, so the optimiser has nothing to optimise over.
         using var context = new Z3Context();
@@ -296,8 +302,8 @@ public class OptimizationTests
     [TestMethod]
     public void OrderBy_OnAnUnsatisfiableTheorem_ReturnsNull()
     {
-        // Arrange: the query-syntax route to the same place. Here the null is at least
-        // well-typed, since ISolveable<T>.Solve is declared to return T?.
+        // Arrange: the query-syntax route to the same place. This one was always well-typed,
+        // since ISolveable<T>.Solve has always been declared to return T?.
         using var context = new Z3Context();
 
         // Act
@@ -327,6 +333,8 @@ public class OptimizationTests
         var childMinimum = child.Optimize(Optimization.Minimize, t => t.X1);
 
         // Assert
+        parentMinimum.ShouldNotBeNull();
+        childMinimum.ShouldNotBeNull();
         parentMinimum.X1.ShouldBe(1);
         childMinimum.X1.ShouldBe(6);
     }
