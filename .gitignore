@@ -359,3 +359,8 @@ _packages/
 
 # Microsoft.Z3 packages downloaded by scripts/Install-Z3Package.ps1
 _z3-feed/*.nupkg
+
+# Test artefacts produced by the Microsoft.Testing.Platform run
+coverage.*.xml
+TestResults/
+*.trx

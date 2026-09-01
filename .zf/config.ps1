@@ -23,9 +23,9 @@ $SkipInit = $false
 $SkipVersion = $false
 $SkipBuild = $false
 $CleanBuild = $Clean
-# NOTE: There is currently no test project in this solution.
-$SkipTest = $true
-$SkipTestReport = $true
+# Z3.Linq.Tests runs on Microsoft.Testing.Platform via the MSTest SDK.
+$SkipTest = $false
+$SkipTestReport = $false
 $SkipAnalysis = $false
 $SkipPackage = $false
 

@@ -15,4 +15,8 @@
     <PackageVersion Include="Microsoft.Z3" Version="5.1.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+  </ItemGroup>
+
 </Project>
