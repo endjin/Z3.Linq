@@ -118,7 +118,6 @@ public class DistinctSelectorTheoremTests
         var result = (from t in context.NewTheorem<Symbols<int, int>>()
                       where Z3Methods.Distinct(multipliers.Select(m => t.X1 * m).ToArray())
                       where t.X1 > 0
-                      where t.X2 == 0
                       select t).Solve();
 
         // Assert
