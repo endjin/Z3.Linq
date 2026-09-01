@@ -327,6 +327,102 @@ public class Theorem
 
             this.context.LogWriteLine(expression.ToString());
         }
+
+        AssertBounds(context, approach, environment);
+    }
+
+    /// <summary>
+    /// Asserts, for every scalar symbol whose CLR type is a bounded integer, that the symbol lies
+    /// within the range of that type.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="approach">The <see cref="Solver"/> or <see cref="Optimize"/> to assert into.</param>
+    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
+    /// <remarks>
+    /// <para>
+    /// A <c>short</c>, <c>int</c>, <c>long</c> or <see cref="DateTime"/> symbol is an unbounded
+    /// Z3 integer, so without this a constraint no value of the type can satisfy - a
+    /// <c>short</c> equal to 40000, a <see cref="DateTime"/> after <see cref="DateTime.MaxValue"/>
+    /// - still had a model, and the read back then failed. With it the theorem is unsatisfiable,
+    /// which is the true answer, and an optimisation with no other bound on the symbol returns
+    /// the extreme of the type rather than whatever Z3 happened to pick. See #87.
+    /// </para>
+    /// <para>
+    /// Only scalars are bounded. A collection is an array from <c>Int</c> to the element sort,
+    /// its length is not known here - it comes from the instance when the solution is read - and
+    /// bounding every element would take a quantifier, which can cost Z3 its completeness. So an
+    /// element is read with a checked conversion instead, and a value outside its type is loud
+    /// rather than wrong.
+    /// </para>
+    /// <para>
+    /// The bounds are not logged: the log shows the constraints the caller wrote.
+    /// </para>
+    /// </remarks>
+    private static void AssertBounds(Context context, Z3Object approach, Environment environment)
+    {
+        foreach ((MemberInfo member, Environment child) in environment.Properties)
+        {
+            if (child.Expr is IntExpr symbol && GetBounds(Type.GetTypeCode(SymbolType(member))) is (long low, long high))
+            {
+                BoolExpr bounds = context.MkAnd(
+                    context.MkGe(symbol, context.MkInt(low)),
+                    context.MkLe(symbol, context.MkInt(high)));
+
+                switch (approach)
+                {
+                    case Solver solver:
+                        solver.Assert(bounds);
+                        break;
+                    case Optimize optimize:
+                        optimize.Assert(bounds);
+                        break;
+                }
+            }
+
+            AssertBounds(context, approach, child);
+        }
+    }
+
+    /// <summary>
+    /// The range of values a CLR type can hold, for the types that travel through Z3 as an
+    /// integer, or <see langword="null"/> for a type with no such range.
+    /// </summary>
+    /// <param name="typeCode">The type code of the CLR type.</param>
+    /// <returns>The inclusive range, or <see langword="null"/>.</returns>
+    /// <remarks>
+    /// A <see cref="DateTime"/> is its ticks (#83), so its range is
+    /// <see cref="DateTime.MinValue"/> to <see cref="DateTime.MaxValue"/> in ticks.
+    /// </remarks>
+    private static (long Low, long High)? GetBounds(TypeCode typeCode)
+    {
+        return typeCode switch
+        {
+            TypeCode.Int16 => (short.MinValue, short.MaxValue),
+            TypeCode.Int32 => (int.MinValue, int.MaxValue),
+            TypeCode.Int64 => (long.MinValue, long.MaxValue),
+            TypeCode.DateTime => (DateTime.MinValue.Ticks, DateTime.MaxValue.Ticks),
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The CLR type a member is solved as: its declared type, or the type a
+    /// <see cref="TheoremVariableTypeMappingAttribute"/> on that type maps it to.
+    /// </summary>
+    /// <param name="member">The property or field.</param>
+    /// <returns>The type the symbol is declared and read as.</returns>
+    private static Type SymbolType(MemberInfo member)
+    {
+        Type type = member switch
+        {
+            PropertyInfo property => property.PropertyType,
+            FieldInfo field => field.FieldType,
+            _ => throw new NotSupportedException(),
+        };
+
+        TheoremVariableTypeMappingAttribute? mapping = type.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault();
+
+        return mapping?.RegularType ?? type;
     }
 
     /// <summary>
@@ -557,7 +653,9 @@ public class Theorem
                             numVal = numValExpr.String;
                             break;
                         case TypeCode.Int16:
-                            // Checked, for the reason given on the scalar arm below. See #63.
+                            // Checked: an element is not bounded to the range of its type - #87
+                            // bounds scalars only - so Z3 can pick a value no short can hold, and
+                            // an unchecked cast would wrap it into a plausible wrong answer. See #63.
                             numVal = checked((short)((IntNum)numValExpr).Int);
                             break;
                         case TypeCode.Int32:
@@ -621,10 +719,10 @@ public class Theorem
                     break;
                 case TypeCode.Int16:
                     // Int16 cannot share the Int32 arm: the model value is an int, and reflection
-                    // refuses to write an int to a short member. The cast is checked because the
-                    // symbol is an unbounded MkIntConst, so Z3 may return a value no short can
-                    // hold - an unchecked cast would wrap it into a plausible wrong answer.
-                    // See #63.
+                    // refuses to write an int to a short member. The cast is checked as a defence:
+                    // since #87 a scalar short is bounded to its range when the constraints are
+                    // asserted, so the check cannot fire here, but it costs nothing and the element
+                    // arm above still depends on it. See #63.
                     value = checked((short)((IntNum)val).Int);
                     break;
                 case TypeCode.Int32:
@@ -702,12 +800,13 @@ public class Theorem
     /// Reads a <see cref="DateTime"/> symbol back from the ticks Z3 holds it as.
     /// </summary>
     /// <remarks>
-    /// The symbol is an unbounded integer, so Z3 can satisfy a constraint with a value no
-    /// <see cref="DateTime"/> can hold - <c>t.X1 &gt; DateTime.MaxValue</c> is satisfiable in
-    /// integers. The <see cref="DateTime"/> constructor would throw for that anyway; this throws
-    /// first, naming the symbol and the range, since the constructor names neither. The same
-    /// trade-off as the checked read of a <c>short</c>: loud rather than wrong. #87 - bounding
-    /// the symbol so Z3 cannot pick such a value - applies here too.
+    /// A scalar <see cref="DateTime"/> symbol is bounded to the range of the type when the
+    /// constraints are asserted (#87), so for a scalar this guard cannot fire. A collection
+    /// element is not bounded - its length is not known when the constraints are asserted - so
+    /// an element constrained beyond the range still has a model and still reaches here, and this
+    /// throws naming the symbol and the range rather than letting the <see cref="DateTime"/>
+    /// constructor complain about a parameter. The same trade-off as the checked read of a
+    /// <c>short</c> element: loud rather than wrong.
     /// </remarks>
     private static DateTime ToDateTime(long ticks, string name)
     {
