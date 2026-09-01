@@ -12,7 +12,7 @@ using System.Reflection;
 /// type's sort in <see cref="Expr"/>, a collection gets an array from <c>Int</c> to that sort,
 /// and a nested object gets an <see cref="Environment"/> of its own under
 /// <see cref="Properties"/>, with no <see cref="Expr"/>. Public because
-/// <see cref="ExpressionVisitor.Visit"/> takes one; there is no reason to build one directly.
+/// the translator takes one; there is no reason to build one directly.
 /// </remarks>
 public class Environment
 {
