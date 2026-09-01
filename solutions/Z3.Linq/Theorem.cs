@@ -23,6 +23,11 @@ public class Theorem
     private readonly IEnumerable<LambdaExpression> constraints;
 
     /// <summary>
+    /// The instance passed to <c>NewTheorem</c>, if any, whose collections give theirs a length.
+    /// </summary>
+    private readonly object? template;
+
+    /// <summary>
     /// Z3 context under which the theorem is solved.
     /// </summary>
     private readonly Z3Context context;
@@ -32,7 +37,7 @@ public class Theorem
     /// </summary>
     /// <param name="context">Z3 context.</param>
     protected Theorem(Z3Context context)
-        : this(context, new List<LambdaExpression>())
+        : this(context, new List<LambdaExpression>(), null)
     {
     }
 
@@ -42,15 +47,35 @@ public class Theorem
     /// <param name="context">Z3 context.</param>
     /// <param name="constraints">Constraints to apply to the created theorem.</param>
     protected Theorem(Z3Context context, IEnumerable<LambdaExpression> constraints)
+        : this(context, constraints, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new pre-constrained theorem for the given Z3 context, with a template instance.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="constraints">Constraints to apply to the created theorem.</param>
+    /// <param name="template">
+    /// An instance of the environment type whose collections supply a length to the solution's,
+    /// or <see langword="null"/>. See #78.
+    /// </param>
+    protected Theorem(Z3Context context, IEnumerable<LambdaExpression> constraints, object? template)
     {
         this.context = context;
         this.constraints = constraints;
+        this.template = template;
     }
 
     /// <summary>
     /// Gets the constraints of the theorem.
     /// </summary>
     protected IEnumerable<LambdaExpression> Constraints => constraints;
+
+    /// <summary>
+    /// Gets the template instance the theorem was created from, if any.
+    /// </summary>
+    protected object? Template => template;
 
     /// <summary>
     /// Gets the Z3 context under which the theorem is solved.
@@ -105,7 +130,7 @@ public class Theorem
             return false;
         }
 
-        result = GetSolution<T>(ctx, solver.Model, environment);
+        result = GetSolution<T>(ctx, solver.Model, environment, this.template);
         return true;
     }
 
@@ -170,7 +195,7 @@ public class Theorem
             return false;
         }
 
-        result = GetSolution<T>(ctx, optimizer.Model, environment);
+        result = GetSolution<T>(ctx, optimizer.Model, environment, this.template);
         return true;
     }
 
@@ -388,7 +413,7 @@ public class Theorem
         return toReturn;
     }
 
-    private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter)
+    private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter, object? templateValue)
     {
         // Normalize types when facing Z3. Theorem variable type mappings allow for strong
         // typing within the theorem, while underlying variable representations are Z3-
@@ -426,17 +451,19 @@ public class Theorem
 
                 var results = new ArrayList();
 
-                //todo: deal with length in a more robust way
-
-                int existingLength = parameter switch
+                // A solution never changes the length of a collection, so the length has to come
+                // from somewhere: the collection on the template passed to NewTheorem, or failing
+                // that the one already on the instance - its initialiser. A value tuple has nowhere
+                // to put an initialiser and an anonymous instance is created uninitialised, so for
+                // those the template is the only source. With neither, say so by name rather than
+                // fail on the null. See #53 and #78.
+                if ((templateValue ?? GetMemberValue(parameter, destinationObject)) is not ICollection existing)
                 {
-                    // Both branches read the value the member holds on the instance. The field
-                    // branch used to cast the FieldInfo itself, which no environment could
-                    // satisfy - see #53.
-                    PropertyInfo property => ((ICollection)property.GetValue(destinationObject, null)!).Count,
-                    FieldInfo field => ((ICollection)field.GetValue(destinationObject)!).Count,
-                    _ => 0
-                };
+                    throw new NotSupportedException(
+                        $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
+                }
+
+                int existingLength = existing.Count;
 
                 for (int i = 0; i < existingLength; i++)
                 {
@@ -496,7 +523,7 @@ public class Theorem
             }
             else
             {
-                value = GetSolution(parameterType, context, model, subEnv);
+                value = GetSolution(parameterType, context, model, subEnv, templateValue);
             }
         }
         else
@@ -600,6 +627,20 @@ public class Theorem
     /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
     /// <summary>
+    /// Reads <paramref name="member"/> off <paramref name="instance"/>, or returns
+    /// <see langword="null"/> if there is no instance to read it from.
+    /// </summary>
+    private static object? GetMemberValue(MemberInfo member, object? instance)
+    {
+        return instance is null ? null : member switch
+        {
+            PropertyInfo property => property.GetValue(instance),
+            FieldInfo field => field.GetValue(instance),
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Whether <paramref name="type"/> is one the library treats as a collection symbol: an
     /// array, or a generic type implementing <see cref="IEnumerable"/>.
     /// </summary>
@@ -608,10 +649,10 @@ public class Theorem
         return type.IsArray || (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type.GetGenericTypeDefinition()));
     }
 
-    private static T GetSolution<T>(Context context, Model model, Environment environment)
+    private static T GetSolution<T>(Context context, Model model, Environment environment, object? template)
     {
         Type t = typeof(T);
-        return (T) GetSolution(t, context, model, environment);
+        return (T) GetSolution(t, context, model, environment, template);
     }
 
     /// <summary>
@@ -621,8 +662,9 @@ public class Theorem
     /// <param name="context">Z3 context.</param>
     /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
     /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
+    /// <param name="template">An instance of <paramref name="t"/> whose collections give the solution's their length, or null.</param>
     /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
-    private static object GetSolution(Type t, Context context, Model model, Environment environment)
+    private static object GetSolution(Type t, Context context, Model model, Environment environment, object? template)
     {
         // Determine whether T is a compiler-generated type, indicating an anonymous type.
         // This check might not be reliable enough but works for now.
@@ -658,17 +700,9 @@ public class Theorem
                 // before checking the type - so a nested object, whose handle is null, reached Z3
                 // and surfaced as a NullReferenceException. See #75.
                 //
-                // A collection is the one thing the shared path cannot do for an anonymous type:
-                // the element count is read from the collection already on the instance, and the
-                // instance here is uninitialised - the one passed to NewTheorem is discarded - so
-                // there is nothing to read it from. Reject it by name rather than let that read
-                // fail on a null.
-                if (IsCollection(parameter.PropertyType))
-                {
-                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ": a collection in an anonymous environment cannot be pre-sized.");
-                }
-
-                field.SetValue(result, ConvertZ3Expression(result, context, model, subEnv, parameter));
+                // The instance here is uninitialised, so a collection on it has no length of its own;
+                // the one on the template - the instance passed to NewTheorem - supplies it. See #78.
+                field.SetValue(result, ConvertZ3Expression(result, context, model, subEnv, parameter, GetMemberValue(parameter, template)));
             }
 
             return result;
@@ -694,7 +728,7 @@ public class Theorem
 
                     var subEnv = environment.Properties[prop];
 
-                    value = ConvertZ3Expression(result, context, model, subEnv, prop);
+                    value = ConvertZ3Expression(result, context, model, subEnv, prop, GetMemberValue(prop, template));
 
                     prop.SetValue(result, value, null);
                 }
@@ -713,7 +747,7 @@ public class Theorem
 
                     var subEnv = environment.Properties[prop];
 
-                    value = ConvertZ3Expression(result, context, model, subEnv, prop);
+                    value = ConvertZ3Expression(result, context, model, subEnv, prop, GetMemberValue(prop, template));
 
                     prop.SetValue(result, value);
                 }

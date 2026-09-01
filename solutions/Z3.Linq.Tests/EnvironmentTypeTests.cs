@@ -16,10 +16,11 @@ namespace Z3.Linq.Tests;
 /// named one does, nested objects included. Until then the anonymous path carried a marshaller
 /// of its own that handled <c>bool</c> and <c>int</c> only, and evaluated a property's handle
 /// before checking its type - so a nested object, whose handle is null, reached Z3 and came back
-/// as a bare <c>NullReferenceException</c>. The one shape still refused is a collection: the
-/// instance passed to <c>NewTheorem</c> is discarded, so nothing can pre-size it, and it is
-/// rejected by name. A value tuple looks like an anonymous type in source but is an ordinary
-/// framework type, so it takes the second path.
+/// as a bare <c>NullReferenceException</c>. A collection takes its length from the instance
+/// passed to <c>NewTheorem</c>, which #78 made the template for the solution - an anonymous
+/// instance is created uninitialised, so that is the only place its length can come from. A
+/// value tuple looks like an anonymous type in source but is an ordinary framework type, so it
+/// takes the second path.
 /// </para>
 /// <para>
 /// Note that <c>Symbols&lt;T1, T2, T3, T4&gt;</c> does not exist - the family provides arities
@@ -256,31 +257,33 @@ public class EnvironmentTypeTests
     }
 
     /// <summary>
-    /// A collection in an anonymous environment is rejected by name.
+    /// A collection in an anonymous environment is sized by the instance passed to
+    /// <c>NewTheorem</c>.
     /// </summary>
     /// <remarks>
-    /// The one shape the shared marshaller cannot serve here. It reads the element count from
-    /// the collection already on the instance, and an anonymous instance is created uninitialised
-    /// - the one passed to <c>NewTheorem</c> is discarded - so there is nothing to read. Without
-    /// the guard this would be #78's <see cref="NullReferenceException"/> on the count; with it,
-    /// the message says which member and why. Pinned because dropping the guard passes every
-    /// other test in this file.
+    /// Refused by name between #75 and #78: an anonymous instance is created uninitialised, so
+    /// the marshaller had no collection to read a length from, and the instance passed to
+    /// <c>NewTheorem</c> - which had one - was discarded. #78 made that instance the template
+    /// for the solution, and with it an anonymous environment can hold a collection like any
+    /// other.
     /// </remarks>
     [TestMethod]
-    public void Solve_AnonymousTypeWithACollectionProperty_ThrowsNotSupportedException()
+    public void Solve_AnonymousTypeWithACollectionProperty_SizesItFromTheTemplate()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem(new { v = new int[2], n = default(int) })
-            .Where(t => t.v[0] == 3)
-            .Where(t => t.n == 1);
 
         // Act
-        NotSupportedException exception = Should.Throw<NotSupportedException>(() => theorem.Solve());
+        var result = context.NewTheorem(new { v = new int[2], n = default(int) })
+            .Where(t => t.v[0] == 3)
+            .Where(t => t.v[1] == 5)
+            .Where(t => t.n == 1)
+            .Solve();
 
         // Assert
-        exception.Message.ShouldContain("v");
-        exception.Message.ShouldContain("pre-sized");
+        result.ShouldNotBeNull();
+        result.v.ShouldBe([3, 5]);
+        result.n.ShouldBe(1);
     }
 
     [TestMethod]
