@@ -20,6 +20,17 @@ using Microsoft.Z3;
 /// </remarks>
 public static class ExpressionVisitor
 {
+    /// <summary>The generic definition of <see cref="Z3Methods.Distinct{T}"/>, cached for the call-site match.</summary>
+    private static readonly MethodInfo DistinctMethod = typeof(Z3Methods).GetMethod(nameof(Z3Methods.Distinct))!;
+
+    /// <summary>The generic definition of <see cref="Enumerable.ToArray{TSource}"/>, cached for the call-site match.</summary>
+    private static readonly MethodInfo EnumerableToArrayMethod =
+        typeof(Enumerable).GetMethods().First(m => m.Name == nameof(Enumerable.ToArray));
+
+    /// <summary>The generic definition of the two-argument <see cref="Enumerable.Select{TSource, TResult}(IEnumerable{TSource}, Func{TSource, TResult})"/>, cached for the call-site match.</summary>
+    private static readonly MethodInfo EnumerableSelectMethod =
+        typeof(Enumerable).GetMethods().First(m => m.Name == nameof(Enumerable.Select) && m.GetParameters().Length == 2);
+
     /// <summary>
     /// Main visitor method to translate the LINQ expression tree into a Z3 expression handle.
     /// </summary>
@@ -35,14 +46,14 @@ public static class ExpressionVisitor
         {
             case ExpressionType.And:
             case ExpressionType.AndAlso:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkAnd((BoolExpr)a, (BoolExpr)b));
+                return VisitLogical(context, environment, (BinaryExpression)expression, param, "&", static (ctx, a, b) => ctx.MkAnd(a, b));
 
             case ExpressionType.Or:
             case ExpressionType.OrElse:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkOr((BoolExpr)a, (BoolExpr)b));
+                return VisitLogical(context, environment, (BinaryExpression)expression, param, "|", static (ctx, a, b) => ctx.MkOr(a, b));
 
             case ExpressionType.ExclusiveOr:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkXor((BoolExpr)a, (BoolExpr)b));
+                return VisitLogical(context, environment, (BinaryExpression)expression, param, "^", static (ctx, a, b) => ctx.MkXor(a, b));
 
             case ExpressionType.Not:
                 return VisitUnary(context, environment, (UnaryExpression)expression, param, (ctx, a) => ctx.MkNot((BoolExpr)a));
@@ -67,7 +78,10 @@ public static class ExpressionVisitor
                 return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkDiv((ArithExpr)a, (ArithExpr)b));
 
             case ExpressionType.Modulo:
-                return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkRem((IntExpr)a, (IntExpr)b));
+                return VisitBinary(context, environment, (BinaryExpression)expression, param, static (ctx, a, b) =>
+                    a is IntExpr ia && b is IntExpr ib
+                        ? ctx.MkRem(ia, ib)
+                        : throw new NotSupportedException("The modulo operator is supported only on integer operands; Z3 has no remainder on real-sorted values."));
 
             case ExpressionType.LessThan:
                 return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkLt((ArithExpr)a, (ArithExpr)b));
@@ -96,9 +110,9 @@ public static class ExpressionVisitor
             case ExpressionType.Call:
                 return VisitCall(context, environment, (MethodCallExpression)expression, param);
 
-/*               case ExpressionType.Parameter:
-                return VisitParameter(context, environment, (ParameterExpression)expression, param);
-            */
+            case ExpressionType.Conditional:
+                return VisitConditional(context, environment, (ConditionalExpression)expression, param);
+
             case ExpressionType.ArrayIndex:
                 return VisitBinary(context, environment, (BinaryExpression)expression, param, (ctx, a, b) => ctx.MkSelect((ArrayExpr)a, b));
                 
@@ -176,6 +190,59 @@ public static class ExpressionVisitor
     }
 
     /// <summary>
+    /// Visitor method to translate <c>&amp;</c>, <c>|</c> and <c>^</c>, which C# uses for both
+    /// Boolean logic and integer bitwise arithmetic.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
+    /// <param name="expression">Binary expression.</param>
+    /// <param name="param">Parameter used to express the constraint on.</param>
+    /// <param name="op">The C# operator, for the diagnostic when the operands are not Boolean.</param>
+    /// <param name="build">Builds the Z3 term from two Boolean operands.</param>
+    /// <returns>Z3 expression handle.</returns>
+    /// <remarks>
+    /// The operator is chosen from the operands' Z3 sort, not from the expression node, because
+    /// the node is the same for <c>bool &amp; bool</c> and <c>int &amp; int</c>. Boolean operands
+    /// give the logical operator; anything else is a bitwise operation, which Z3's integer sort
+    /// has no counterpart for, so it is rejected with a message that says so rather than an
+    /// <see cref="InvalidCastException"/> from inside the cast.
+    /// </remarks>
+    private static Expr VisitLogical(Context context, Environment environment, BinaryExpression expression, ParameterExpression param, string op, Func<Context, BoolExpr, BoolExpr, BoolExpr> build)
+    {
+        Expr left = Visit(context, environment, expression.Left, param);
+        Expr right = Visit(context, environment, expression.Right, param);
+
+        if (left is BoolExpr boolLeft && right is BoolExpr boolRight)
+        {
+            return build(context, boolLeft, boolRight);
+        }
+
+        throw new NotSupportedException(
+            $"The '{op}' operator is supported only on Boolean operands. A bitwise operation on integer symbols is not supported, because it would need a bit-vector representation the library does not expose.");
+    }
+
+    /// <summary>
+    /// Visitor method to translate a conditional (ternary <c>?:</c>) expression.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
+    /// <param name="expression">Conditional expression.</param>
+    /// <param name="param">Parameter used to express the constraint on.</param>
+    /// <returns>Z3 expression handle.</returns>
+    /// <remarks>
+    /// Maps onto Z3's if-then-else term. The two branches must share a sort, which they do for
+    /// any ternary the C# compiler accepts, since both arms are converted to a common type.
+    /// </remarks>
+    private static Expr VisitConditional(Context context, Environment environment, ConditionalExpression expression, ParameterExpression param)
+    {
+        Expr test = Visit(context, environment, expression.Test, param);
+        Expr ifTrue = Visit(context, environment, expression.IfTrue, param);
+        Expr ifFalse = Visit(context, environment, expression.IfFalse, param);
+
+        return context.MkITE((BoolExpr)test, ifTrue, ifFalse);
+    }
+
+    /// <summary>
     /// Visitor method to translate a method call expression.
     /// </summary>
     /// <param name="context">Z3 context.</param>
@@ -217,7 +284,7 @@ public static class ExpressionVisitor
         }
 
         // Filter for known Z3 operators.
-        if (method.IsGenericMethod && method.GetGenericMethodDefinition() == typeof(Z3Methods).GetMethod("Distinct"))
+        if (method.IsGenericMethod && method.GetGenericMethodDefinition() == DistinctMethod)
         {
             // We know the signature of the Distinct method call. Its argument is a params
             // array, hence we expect a NewArrayExpression.
@@ -226,13 +293,12 @@ public static class ExpressionVisitor
             var itemsExpression = call.Arguments[0];
             if (itemsExpression is MethodCallExpression mExp)
             {
-                if (mExp.Method.IsGenericMethod && mExp.Method.GetGenericMethodDefinition() == typeof(Enumerable)
-                    .GetMethods().First(m => m.Name == nameof(Enumerable.ToArray)))
+                if (mExp.Method.IsGenericMethod && mExp.Method.GetGenericMethodDefinition() == EnumerableToArrayMethod)
                 {
                     var callerToArrayExp = mExp.Arguments[0];
                     if (callerToArrayExp is MethodCallExpression callerToArrayMethodExp)
                     {
-                        if (callerToArrayMethodExp.Method.IsGenericMethod && callerToArrayMethodExp.Method.GetGenericMethodDefinition() == typeof(Enumerable).GetMethods().First(m => m.Name == nameof(Enumerable.Select) && m.GetParameters().Length == 2))
+                        if (callerToArrayMethodExp.Method.IsGenericMethod && callerToArrayMethodExp.Method.GetGenericMethodDefinition() == EnumerableSelectMethod)
                         {
                             var caller = (ICollection)ExpressionInterpreter.Instance.Interpret(callerToArrayMethodExp.Arguments[0]);
                             var arg = callerToArrayMethodExp.Arguments[1] as LambdaExpression;
@@ -270,7 +336,7 @@ public static class ExpressionVisitor
 
             if (distinctExps == null)
             {
-                throw new NotSupportedException("unsuported method call:" + method.ToString() + "with sub expression " + call.Arguments[0].ToString());
+                throw new NotSupportedException("Unsupported method call: " + method.ToString() + " with sub expression " + call.Arguments[0].ToString());
             }
 
             IEnumerable<Expr> args = from Expression arg in distinctExps 
@@ -334,7 +400,7 @@ public static class ExpressionVisitor
                 // which is the convention ToFileTimeUtc had and the read path inverts. See #56.
                 return context.MkInt(ToUtcTicks((DateTime)val));
             case TypeCode.String:
-                return context.MkString(val.ToString());
+                return context.MkString((string)val);
             default:
                 throw new NotSupportedException($"Unsupported constant {val}");
         }
@@ -410,10 +476,6 @@ public static class ExpressionVisitor
 
                 throw new NotSupportedException($"Could not reduce expression {topMember.Expression}");
             }
-            else
-            {
-                //Debugger.Break(); 
-            }
         }
 
         // Only members we allow currently are direct accesses to the theorem's variables
@@ -438,20 +500,6 @@ public static class ExpressionVisitor
 
         return subEnv.Expr!;
     }
-
-/*      
-    private static Expr VisitParameter(Context context, Environment environment, ParameterExpression expression, ParameterExpression param)
-    {
-        Expr value;
-
-        if (!environment.Properties.TryGetValue(expression., out value))
-        {
-            throw new NotSupportedException("Unknown parameter encountered: " + expression.Name + ".");
-        }
-
-        return value;
-    }
-*/
 
     /// <summary>
     /// Visitor method to translate a unary expression.
