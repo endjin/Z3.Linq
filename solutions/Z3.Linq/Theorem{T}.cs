@@ -81,6 +81,13 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// rather than as local time. The result is therefore the same on every machine; a caller
     /// working in local time needs <see cref="DateTime.ToLocalTime"/> on the way out.
     /// </para>
+    /// <para>
+    /// A <c>short</c>, <c>int</c>, <c>long</c> or <see cref="DateTime"/> symbol is bounded to the
+    /// range of its type, so a constraint no value of the type can satisfy makes the theorem
+    /// unsatisfiable, and an optimisation with no other bound on such a symbol returns the
+    /// extreme of the type. Elements of a collection are not bounded; one constrained beyond its
+    /// type is read with a checked conversion and throws. See #87.
+    /// </para>
     /// </remarks>
     public T? Solve(CancellationToken cancellationToken = default)
     {

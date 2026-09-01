@@ -192,25 +192,25 @@ public class SymbolTypeMarshallingTests
     }
 
     /// <summary>
-    /// A <c>short</c> symbol whose model value no <c>short</c> can hold fails loudly.
+    /// A <c>short</c> symbol constrained to a value no <c>short</c> can hold has no solution.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The symbol is an unbounded <c>MkIntConst</c> - nothing tells Z3 the value has to fit in
-    /// 16 bits - so a constraint written against the widened <c>int</c> can be satisfied by a
-    /// number the member cannot hold. The read is a checked cast, which throws; an unchecked one
-    /// would wrap 40000 to -25536 and hand back a wrong answer that looks like a right one.
+    /// C# blocks the direct spelling of this - <c>t.X1 == 40000</c> against a <c>short</c> is
+    /// <c>error CS0652</c> - so it takes an <c>int</c> variable to reach, and the constraint is
+    /// then written against the widened <c>int</c>, which 40000 satisfies. Until #87 the symbol
+    /// was an unbounded integer, so Z3 found that model and the checked read of the result threw
+    /// <see cref="OverflowException"/>: loud, but the wrong answer - there is no short equal to
+    /// 40000, and the theorem is unsatisfiable. The symbol is now bounded to the range of its
+    /// type when the constraints are asserted, and that is what comes back.
     /// </para>
     /// <para>
-    /// C# blocks the direct spelling of this - <c>t.X1 == 40000</c> against a <c>short</c> is
-    /// <c>error CS0652</c> - so it takes an <c>int</c> variable to reach. Pinned because the
-    /// choice between wrapping and throwing is the whole point of the arm, and a later
-    /// simplification to a plain cast would pass every other test in this file. See #63, and
-    /// #87 for bounding the symbol so Z3 cannot pick the value in the first place.
+    /// The checked read stays, as a defence and because a collection element still needs it -
+    /// see <c>CollectionSymbolTests</c>.
     /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_ShortSymbolConstrainedOutsideShortRange_ThrowsOverflowException()
+    public void Solve_ShortSymbolConstrainedOutsideShortRange_IsUnsatisfiable()
     {
         // Arrange
         using var context = new Z3Context();
@@ -218,8 +218,11 @@ public class SymbolTypeMarshallingTests
         var theorem = context.NewTheorem<Symbols<short, int>>()
             .Where(t => t.X1 == beyondShortRange);
 
-        // Act & Assert
-        Should.Throw<OverflowException>(() => theorem.Solve());
+        // Act
+        bool satisfiable = theorem.TrySolve(out _);
+
+        // Assert
+        satisfiable.ShouldBeFalse();
     }
 
     /// <summary>
@@ -680,27 +683,24 @@ public class SymbolTypeMarshallingTests
     }
 
     /// <summary>
-    /// A <see cref="DateTime"/> symbol whose model value no <see cref="DateTime"/> can hold fails
-    /// loudly, naming the symbol.
+    /// A <see cref="DateTime"/> symbol constrained beyond the range of the type has no solution.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The symbol is an unbounded integer, so <c>t.X1 &gt; DateTime.MaxValue</c> - which has no
-    /// solution in <see cref="DateTime"/> terms - is satisfiable in Z3's integers, and the model
-    /// is a tick count beyond the type. The read path used to hand that to
-    /// <c>FromFileTimeUtc</c> and let it throw about a <c>fileTime</c> parameter; it now checks
-    /// the range itself and says which symbol and what the range is. The same trade-off as the
-    /// checked read of a <c>short</c>: loud rather than wrong, until #87 bounds the symbol so
-    /// Z3 cannot choose such a value at all.
+    /// <c>t.X1 &gt; DateTime.MaxValue</c> has no solution in <see cref="DateTime"/> terms. Until
+    /// #87 the symbol was an unbounded integer, so it had one in Z3's - a tick count beyond the
+    /// type - and the read threw. The symbol is now bounded to the range of the type when the
+    /// constraints are asserted, so the theorem is unsatisfiable, which is the true answer.
     /// </para>
     /// <para>
     /// Both ends are pinned. The bottom is the case #83 reported as the read-side failure, and
-    /// with the encoding now starting at tick zero it is only reachable by constraining below
-    /// <see cref="DateTime.MinValue"/> itself.
+    /// with the encoding starting at tick zero it is only reachable by constraining below
+    /// <see cref="DateTime.MinValue"/> itself. The read guard #83 added stays, for collection
+    /// elements - see <c>CollectionSymbolTests</c>.
     /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_DateTimeSymbolConstrainedBeyondMaxValue_ThrowsOverflowExceptionNamingIt()
+    public void Solve_DateTimeSymbolConstrainedBeyondMaxValue_IsUnsatisfiable()
     {
         // Arrange
         using var context = new Z3Context();
@@ -709,15 +709,14 @@ public class SymbolTypeMarshallingTests
             .Where(t => t.X1 > max && t.X2 == 0);
 
         // Act
-        OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
+        bool satisfiable = theorem.TrySolve(out _);
 
         // Assert
-        exception.Message.ShouldContain("X1");
-        exception.Message.ShouldContain("0001-01-01 to 9999-12-31");
+        satisfiable.ShouldBeFalse();
     }
 
     [TestMethod]
-    public void Solve_DateTimeSymbolConstrainedBelowMinValue_ThrowsOverflowExceptionNamingIt()
+    public void Solve_DateTimeSymbolConstrainedBelowMinValue_IsUnsatisfiable()
     {
         // Arrange
         using var context = new Z3Context();
@@ -726,10 +725,10 @@ public class SymbolTypeMarshallingTests
             .Where(t => t.X1 < min && t.X2 == 0);
 
         // Act
-        OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
+        bool satisfiable = theorem.TrySolve(out _);
 
         // Assert
-        exception.Message.ShouldContain("X1");
+        satisfiable.ShouldBeFalse();
     }
 
     [TestMethod]
