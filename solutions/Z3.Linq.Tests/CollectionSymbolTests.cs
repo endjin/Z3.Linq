@@ -179,6 +179,29 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
+    /// KNOWN DEFECT (#64), and the reason the array half of #54 cannot be observed.
+    /// </summary>
+    /// <remarks>
+    /// The element loop has its own <c>TypeCode.Single</c> arm with the same defect #54 fixed on
+    /// the scalar path, and it was corrected in the same commit. No test can reach it: a float
+    /// array declares a floating-point range against a real-valued constraint and never survives
+    /// translation, exactly as a double array does not.
+    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_FloatArraySymbol_ThrowsZ3Exception()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<FloatArrayEnvironment>()
+            .Where(t => t.Values[0] == 1.5f)
+            .Where(t => t.Length == 2);
+
+        // Act & Assert
+        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
+    }
+
+    /// <summary>
     /// KNOWN DEFECT (#64), and the reason #55 cannot currently be observed.
     /// </summary>
     /// <remarks>
@@ -545,6 +568,13 @@ public class CollectionSymbolTests
     private sealed class DoubleArrayEnvironment
     {
         public double[] Values { get; set; } = new double[2];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class FloatArrayEnvironment
+    {
+        public float[] Values { get; set; } = new float[2];
 
         public int Length { get; set; }
     }

@@ -122,32 +122,34 @@ public class CultureInvarianceTests
     }
 
     /// <summary>
-    /// A <c>float</c> constant gets past translation under a foreign culture and fails at the
-    /// read back instead - which is #54, not #52.
+    /// A <c>float</c> constant survives a foreign culture like the other two real types.
     /// </summary>
     /// <remarks>
     /// <c>float</c> takes the same arm of the constant switch as <c>double</c> and
-    /// <c>decimal</c>, so without this the fix would have a third of its call site untested. It
-    /// cannot be a round-trip test, because a float symbol cannot round-trip at all: the model
-    /// value is parsed into a double and reflection then refuses to write it to a float
-    /// property. Under the defect this threw <c>Z3Exception</c> during translation, so reaching
-    /// <see cref="ArgumentException"/> is itself the evidence that translation now succeeds.
+    /// <c>decimal</c>, so without this the #52 fix would have a third of its call site untested.
+    /// It could only assert an <see cref="ArgumentException"/> when it was written, because a
+    /// float symbol could not round-trip at all: #54 parsed the model value into a double and
+    /// reflection refused to write that to a float property. Now that #54 is fixed it says what
+    /// it always wanted to.
     /// </remarks>
     [TestMethod]
-    public void Solve_FloatConstantUnderANonInvariantCulture_FailsInMarshallingNotTranslation()
+    public void Solve_FloatConstantUnderANonInvariantCulture_RoundTripsTheValue()
     {
         // Arrange
         const string Culture = "de-DE";
         CultureInfo cultureInfo = RequireANonInvariantRendering(Culture, 1.5f);
 
-        // Act & Assert
-        Should.Throw<ArgumentException>(() => SolveOn(cultureInfo, () =>
+        // Act
+        float? value = SolveOn(cultureInfo, () =>
         {
             using var context = new Z3Context();
             return context.NewTheorem<Symbols<float, int>>()
                 .Where(t => t.X1 == 1.5f)
                 .Solve()?.X1;
-        }));
+        });
+
+        // Assert
+        value.ShouldBe(1.5f);
     }
 
     /// <summary>
