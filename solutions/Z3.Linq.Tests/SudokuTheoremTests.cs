@@ -104,14 +104,29 @@ public class SudokuTheoremTests
         // Assert
         result.ShouldNotBeNull();
 
-        // The givens must survive the solve.
+        // Every given must survive the solve - all 21, not a sample of them. Checking a subset
+        // would let a regression that dropped or mistranslated some of the constraints through,
+        // which is precisely the failure mode worth catching at this size.
         result.Cell13.ShouldBe(2);
         result.Cell16.ShouldBe(1);
         result.Cell18.ShouldBe(6);
+        result.Cell23.ShouldBe(7);
+        result.Cell26.ShouldBe(4);
         result.Cell31.ShouldBe(5);
         result.Cell37.ShouldBe(9);
+        result.Cell42.ShouldBe(1);
+        result.Cell44.ShouldBe(3);
+        result.Cell51.ShouldBe(8);
         result.Cell55.ShouldBe(5);
+        result.Cell59.ShouldBe(4);
+        result.Cell66.ShouldBe(6);
+        result.Cell68.ShouldBe(2);
+        result.Cell73.ShouldBe(6);
+        result.Cell79.ShouldBe(7);
+        result.Cell84.ShouldBe(8);
+        result.Cell87.ShouldBe(3);
         result.Cell92.ShouldBe(4);
+        result.Cell94.ShouldBe(9);
         result.Cell97.ShouldBe(2);
 
         AssertIsValidSudokuGrid(ToGrid(result));

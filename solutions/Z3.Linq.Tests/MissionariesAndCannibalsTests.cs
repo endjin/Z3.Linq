@@ -194,14 +194,26 @@ public class MissionariesAndCannibalsTests
                     farCannibals, $"far bank at step {step}");
             }
 
-            // Each crossing moves at least one person and at most a boatful.
+            // Each crossing moves at least one person, at most a boatful, and in the direction
+            // the boat is actually travelling. The sample alternates by step parity - from an
+            // even step the boat leaves the near bank, from an odd step it returns - so checking
+            // only the magnitude would accept a plan that crossed twice the same way without
+            // the boat ever coming back.
             if (step > 0)
             {
-                int moved = Math.Abs(
-                    (nearMissionaries + nearCannibals)
-                    - (result.Missionaries[step - 1] + result.Cannibals[step - 1]));
+                int delta = (nearMissionaries + nearCannibals)
+                    - (result.Missionaries[step - 1] + result.Cannibals[step - 1]);
 
-                moved.ShouldBeInRange(1, boatSize, $"people moved into step {step}");
+                if ((step - 1) % 2 == 0)
+                {
+                    // Boat leaves the near bank, so its population falls.
+                    delta.ShouldBeInRange(-boatSize, -1, $"crossing into step {step}");
+                }
+                else
+                {
+                    // Boat returns, so its population rises.
+                    delta.ShouldBeInRange(1, boatSize, $"return into step {step}");
+                }
             }
         }
     }
