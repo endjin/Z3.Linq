@@ -1,0 +1,33 @@
+<Project>
+
+  <!-- Language and platform settings shared by every project in the solution. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Microsoft.Z3 ships native x64 binaries, so every project has to be x64. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Package metadata common to the packable projects. Per-package values
+       (Description, PackageTags) stay in the individual project files. -->
+  <PropertyGroup>
+    <Authors>bartdesmet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/endjin/Z3.Linq</PackageProjectUrl>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <RepositoryUrl>https://github.com/endjin/Z3.Linq</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <!-- Let SourceLink (bundled in the .NET SDK) fill in RepositoryBranch/RepositoryCommit
+       and embed the repo URL in the package. -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <!-- Deterministic, CI-tagged builds when running under GitHub Actions. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>
