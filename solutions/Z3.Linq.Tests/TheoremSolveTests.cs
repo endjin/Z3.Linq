@@ -13,10 +13,11 @@ namespace Z3.Linq.Tests;
 /// packages daily on this repository.
 /// </para>
 /// <para>
-/// Unsatisfiable cases are deliberately kept trivial. <c>Solve</c> returns <c>default</c> for
-/// both <c>Status.UNSATISFIABLE</c> and <c>Status.UNKNOWN</c> (Theorem.cs:85-87), so a theorem
-/// that was merely slow would pass an "is unsatisfiable" assertion. Keeping these obviously
-/// contradictory removes that risk.
+/// Unsatisfiable cases are deliberately kept trivial. Since #85 a solve that stops without
+/// deciding throws <c>TheoremUndecidedException</c> rather than reporting the theorem
+/// unsatisfiable, so a merely slow theorem can no longer pass an "is unsatisfiable" assertion by
+/// accident - but only once a limit is set, and none is set here. Keeping these obviously
+/// contradictory keeps them fast as well as right.
 /// </para>
 /// <para>
 /// A symbol the returned model does not interpret takes an arbitrary value supplied by Z3's

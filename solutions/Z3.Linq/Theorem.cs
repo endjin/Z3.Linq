@@ -96,14 +96,15 @@ public class Theorem
     /// </summary>
     /// <typeparam name="T">Theorem environment type.</typeparam>
     /// <returns>Result of solving the theorem; <c>default(T)</c> if the theorem cannot be satisfied.</returns>
+    /// <param name="cancellationToken">A token that interrupts the solve.</param>
     /// <remarks>
     /// For a value-type environment <c>default(T)</c> is a real, populated instance - all zeroes -
     /// and so cannot be told apart from a solution in which every symbol happens to be zero. Use
-    /// <see cref="TrySolve{T}(out T)"/> where that matters. See #57.
+    /// <see cref="TrySolve{T}(out T, CancellationToken)"/> where that matters. See #57.
     /// </remarks>
-    protected T? Solve<T>()
+    protected T? Solve<T>(CancellationToken cancellationToken)
     {
-        return this.TrySolve<T>(out T? result) ? result : default;
+        return this.TrySolve<T>(out T? result, cancellationToken) ? result : default;
     }
 
     /// <summary>
@@ -111,8 +112,11 @@ public class Theorem
     /// </summary>
     /// <typeparam name="T">Theorem environment type.</typeparam>
     /// <param name="result">The solution, when the theorem could be satisfied.</param>
+    /// <param name="cancellationToken">A token that interrupts the solve.</param>
     /// <returns><see langword="true"/> if the theorem was satisfiable; otherwise <see langword="false"/>.</returns>
-    protected bool TrySolve<T>([MaybeNullWhen(false)] out T result)
+    /// <exception cref="TheoremUndecidedException">Z3 stopped without deciding - a limit on the <see cref="Z3Context"/> was reached, or it gave up.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    protected bool TrySolve<T>([MaybeNullWhen(false)] out T result, CancellationToken cancellationToken)
     {
         using Context ctx = this.context.CreateContext();
         var environment = GetEnvironment(ctx, typeof(T));
@@ -122,7 +126,7 @@ public class Theorem
 
         AssertConstraints<T>(ctx, solver, environment);
 
-        Status status = solver.Check();
+        Status status = this.Check(ctx, solver, cancellationToken);
 
         if (status != Status.SATISFIABLE)
         {
@@ -142,14 +146,16 @@ public class Theorem
     /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
     /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
     /// <returns>Result of solving the theorem; <c>default(T)</c> if the theorem cannot be satisfied.</returns>
+    /// <param name="cancellationToken">A token that interrupts the optimisation.</param>
     /// <remarks>
-    /// Carries the same ambiguity as <see cref="Solve{T}"/> for a value-type environment. Use
-    /// <see cref="TryOptimize{T, TResult}(Optimization, Expression{Func{T, TResult}}, out T)"/>
+    /// Carries the same ambiguity as <see cref="Solve{T}(CancellationToken)"/> for a value-type
+    /// environment. Use
+    /// <see cref="TryOptimize{T, TResult}(Optimization, Expression{Func{T, TResult}}, out T, CancellationToken)"/>
     /// where that matters. See #57.
     /// </remarks>
-    protected T? Optimize<T, TResult>(Optimization direction, Expression<Func<T, TResult>> lambda)
+    protected T? Optimize<T, TResult>(Optimization direction, Expression<Func<T, TResult>> lambda, CancellationToken cancellationToken)
     {
-        return this.TryOptimize<T, TResult>(direction, lambda, out T? result) ? result : default;
+        return this.TryOptimize<T, TResult>(direction, lambda, out T? result, cancellationToken) ? result : default;
     }
 
     /// <summary>
@@ -160,11 +166,15 @@ public class Theorem
     /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
     /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
     /// <param name="result">The optimal solution, when the theorem could be satisfied.</param>
+    /// <param name="cancellationToken">A token that interrupts the optimisation.</param>
     /// <returns><see langword="true"/> if the theorem was satisfiable; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="TheoremUndecidedException">Z3 stopped without deciding - a limit on the <see cref="Z3Context"/> was reached, or it gave up.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     protected bool TryOptimize<T, TResult>(
         Optimization direction,
         Expression<Func<T, TResult>> lambda,
-        [MaybeNullWhen(false)] out T result)
+        [MaybeNullWhen(false)] out T result,
+        CancellationToken cancellationToken)
     {
         using Context ctx = this.context.CreateContext();
         var environment = GetEnvironment(ctx, typeof(T));
@@ -187,7 +197,7 @@ public class Theorem
                 throw new ArgumentOutOfRangeException(nameof(direction), direction, null);
         }
 
-        Status status = optimizer.Check();
+        Status status = this.Check(ctx, optimizer, cancellationToken);
 
         if (status != Status.SATISFIABLE)
         {
@@ -197,6 +207,76 @@ public class Theorem
 
         result = GetSolution<T>(ctx, optimizer.Model, environment, this.template);
         return true;
+    }
+
+    /// <summary>
+    /// Runs the check on a solver or optimizer under the limits set on the <see cref="Z3Context"/>
+    /// and the caller's token, and turns an undecided outcome into an exception.
+    /// </summary>
+    /// <param name="ctx">The native context the check runs in.</param>
+    /// <param name="approach">The <see cref="Solver"/> or <see cref="Optimize"/> to check.</param>
+    /// <param name="cancellationToken">A token that interrupts the check.</param>
+    /// <returns><see cref="Status.SATISFIABLE"/> or <see cref="Status.UNSATISFIABLE"/> - never <see cref="Status.UNKNOWN"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// A cancelled token interrupts Z3 through <see cref="Context.Interrupt"/>. An interrupt that
+    /// arrives before the check has started is lost - measured, not assumed - so the token is
+    /// also inspected before the check, which leaves only the moment between that inspection and
+    /// Z3 starting work.
+    /// </para>
+    /// <para>
+    /// Z3 says why it stopped as a string, and the strings are not consistent: the solver says
+    /// <c>timeout</c> or <c>interrupted</c>, the optimizer says <c>canceled</c> for either, and an
+    /// exhausted resource limit is <c>canceled</c> on both. So cancellation is recognised from the
+    /// token rather than the string, and every other <see cref="Status.UNKNOWN"/> is a
+    /// <see cref="TheoremUndecidedException"/> carrying the string. Before #85 an
+    /// <see cref="Status.UNKNOWN"/> was reported as unsatisfiable, which was defensible only
+    /// because nothing could cause one.
+    /// </para>
+    /// </remarks>
+    private Status Check(Context ctx, Z3Object approach, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        Params? limits = this.context.CreateLimits(ctx);
+
+        switch (approach)
+        {
+            case Solver solver when limits is not null:
+                solver.Parameters = limits;
+                break;
+            case Optimize optimizer when limits is not null:
+                optimizer.Parameters = limits;
+                break;
+        }
+
+        Status status;
+
+        using (cancellationToken.Register(ctx.Interrupt))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            status = approach switch
+            {
+                Solver solver => solver.Check(),
+                Optimize optimizer => optimizer.Check(),
+                _ => throw new ArgumentException("Expected a Solver or an Optimize.", nameof(approach)),
+            };
+        }
+
+        if (status == Status.UNKNOWN)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            throw new TheoremUndecidedException(approach switch
+            {
+                Solver solver => solver.ReasonUnknown,
+                Optimize optimizer => optimizer.ReasonUnknown,
+                _ => "unknown",
+            });
+        }
+
+        return status;
     }
 
     /// <summary>
