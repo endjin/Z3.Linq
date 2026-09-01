@@ -164,7 +164,7 @@ public class OptimizationTests
     }
 
     [TestMethod]
-    public void Optimize_ObjectiveOverSeveralSymbols_MinimisesTheirCombination()
+    public void Optimize_ObjectiveOverSeveralSymbols_MinimizesTheirCombination()
     {
         // Arrange: the objective need not be a single symbol. Both are free within their ranges
         // and only their sum is minimised, so the sum is what can be asserted.
@@ -214,7 +214,7 @@ public class OptimizationTests
     }
 
     [TestMethod]
-    public void Optimize_MinimisingIsNotJustTheFirstSatisfyingModel()
+    public void Optimize_MinimizingIsNotJustTheFirstSatisfyingModel()
     {
         // Arrange: this is the test that distinguishes optimising from solving. A plain Solve
         // over the same constraints may return any value in [5, 100]; minimising must return 5.
