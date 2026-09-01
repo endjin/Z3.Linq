@@ -8,7 +8,7 @@ namespace Z3.Linq.Tests;
 /// <para>
 /// A collection symbol is declared as a Z3 array with a domain (index) sort and a range
 /// (element) sort chosen per element type (Theorem.cs:205-235). Elements are always read with
-/// an integer index (Theorem.cs:446), and the number read is the <c>Count</c> of the collection
+/// an integer index (Theorem.cs:448), and the number read is the <c>Count</c> of the collection
 /// already on the instance - so an environment must pre-size its collections, and a solution
 /// never changes their length.
 /// </para>
@@ -17,6 +17,11 @@ namespace Z3.Linq.Tests;
 /// contradicts how the elements are constrained or read, and throws during translation; those
 /// cases are pinned below against #64. The Sudoku examples are all <c>int</c>, which is why the
 /// limitation has gone unnoticed.
+/// </para>
+/// <para>
+/// A collection symbol can be a property or a public field, and since #53 the two behave
+/// identically. A collection the environment leaves null throws either way, which is #78 - and
+/// unavoidable for a ValueTuple, whose elements are fields it has no way to pre-size.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -107,7 +112,7 @@ public class CollectionSymbolTests
     {
         // Arrange: the non-array branch, reached for a generic type implementing IEnumerable.
         // It is reconstructed by passing the element array to the collection's constructor
-        // (Theorem.cs:490), which List<int> supports.
+        // (Theorem.cs:497), which List<int> supports.
         using var context = new Z3Context();
 
         // Act
@@ -178,7 +183,7 @@ public class CollectionSymbolTests
     /// </summary>
     /// <remarks>
     /// #55 describes the decimal element branch evaluating the whole array expression instead of
-    /// the selected element (Theorem.cs:471-474), which would give every element the same value.
+    /// the selected element (Theorem.cs:474-477), which would give every element the same value.
     /// That code is still wrong, but unreachable: a decimal array never survives translation.
     /// </remarks>
     [TestMethod]
@@ -195,27 +200,261 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#53): a collection held in a public field cannot be marshalled.
+    /// A collection held in a public field round-trips exactly as one held in a property does.
     /// </summary>
     /// <remarks>
-    /// Determining how many elements to read casts the reflection object itself rather than the
-    /// value it holds - <c>((ICollection)info1).Count</c> where <c>info1</c> is the
-    /// <see cref="System.Reflection.FieldInfo"/> (Theorem.cs:439). The property branch beside it
-    /// correctly calls <c>GetValue</c> first, which is why an array property works and an array
-    /// field does not.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// <para>
+    /// The case in #53. Working out how many elements to read cast the reflection object itself -
+    /// <c>((ICollection)info1).Count</c>, where <c>info1</c> was the
+    /// <see cref="System.Reflection.FieldInfo"/> - so every collection field threw
+    /// <see cref="InvalidCastException"/>, while the property branch beside it, which calls
+    /// <c>GetValue</c> first, worked.
+    /// </para>
+    /// <para>
+    /// Fixing it made the whole element-materialisation loop reachable through a field for the
+    /// first time, so the tests below walk that path rather than stopping at this one case.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_CollectionInAPublicField_ThrowsInvalidCastException()
+    public void Solve_IntArrayInAPublicField_RoundTripsEveryElement()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<FieldCollectionEnvironment>()
+
+        // Act
+        var result = context.NewTheorem<FieldCollectionEnvironment>()
             .Where(t => t.Values[0] == 1)
-            .Where(t => t.Length == 2);
+            .Where(t => t.Values[1] == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([1, 2]);
+    }
+
+    [TestMethod]
+    public void Solve_GenericIntCollectionInAPublicField_RoundTripsEveryElement()
+    {
+        // Arrange: the non-array branch of the same block, which reconstructs the collection
+        // through its constructor rather than materialising an array.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<FieldListEnvironment>()
+            .Where(t => t.Values[0] == 7)
+            .Where(t => t.Values[1] == 8)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([7, 8]);
+    }
+
+    /// <summary>
+    /// A field collection and a property collection in the same environment both round-trip.
+    /// </summary>
+    /// <remarks>
+    /// The direct evidence that the two branches now agree: one environment, one solve, and each
+    /// arm produces its own answer rather than one of them throwing.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_CollectionsInAFieldAndAPropertySideBySide_RoundTripBoth()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<FieldAndPropertyCollectionEnvironment>()
+            .Where(t => t.FieldValues[0] == 1)
+            .Where(t => t.PropertyValues[0] == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.FieldValues.ShouldBe([1]);
+        result.PropertyValues.ShouldBe([2]);
+    }
+
+    [TestMethod]
+    public void Solve_CollectionInAPublicFieldOfANestedObject_RoundTripsEveryElement()
+    {
+        // Arrange: the count is read from the object the field lives on, which for a nested
+        // environment is the inner instance rather than the one being returned. Worth its own
+        // case, because that argument is exactly what the defect got wrong.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<NestedFieldCollectionEnvironment>()
+            .Where(t => t.Inner.Values[0] == 9)
+            .Where(t => t.Inner.Values[1] == 10)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Inner.Values.ShouldBe([9, 10]);
+    }
+
+    /// <summary>
+    /// A <c>readonly</c> collection field is written anyway.
+    /// </summary>
+    /// <remarks>
+    /// The solution is assigned with <c>FieldInfo.SetValue</c>, which the runtime permits on an
+    /// initonly instance field, so the modifier buys no protection here - the field ends up
+    /// holding a different array from the one its initialiser created. Recorded because it is the
+    /// opposite of what the declaration suggests, and because <c>readonly</c> is a natural thing
+    /// to write on a collection that only exists to be pre-sized.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_CollectionInAReadOnlyField_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<ReadOnlyFieldCollectionEnvironment>()
+            .Where(t => t.Values[0] == 3)
+            .Where(t => t.Values[1] == 4)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([3, 4]);
+    }
+
+    [TestMethod]
+    public void Solve_EmptyCollectionInAPublicField_ReturnsAnEmptyCollection()
+    {
+        // Arrange: the boundary at the other end - a count of zero, so the element loop never
+        // runs and the field is assigned an empty array.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<EmptyFieldCollectionEnvironment>().Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBeEmpty();
+    }
+
+    /// <summary>
+    /// A collection field no constraint touches keeps the length it was initialised with.
+    /// </summary>
+    /// <remarks>
+    /// The length comes from the instance rather than from the model, so it survives a theorem
+    /// that says nothing at all. The element values come from model completion (#51) and are not
+    /// asserted.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_UnconstrainedCollectionInAPublicField_PreservesTheInitialisedLength()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<FieldCollectionEnvironment>().Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(2);
+    }
+
+    [TestMethod]
+    public void OrderByDescending_OverAnElementOfACollectionField_ReturnsTheOptimum()
+    {
+        // Arrange: the optimiser reads its solution back through the same marshalling code, so
+        // the fix has to hold on that path too.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<FieldCollectionEnvironment>()
+            .Where(t => t.Values[0] > 0)
+            .Where(t => t.Values[0] < 10)
+            .OrderByDescending(t => t.Values[0])
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values[0].ShouldBe(9);
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#64): a field is no better off than a property for element types other than
+    /// <c>int</c>.
+    /// </summary>
+    /// <remarks>
+    /// Translation fails before any marshalling happens, so this failed identically before #53 was
+    /// fixed. It is here so the fix cannot be mistaken for having widened the element types a
+    /// field supports. See <see cref="Solve_LongArraySymbol_ThrowsZ3Exception"/>.
+    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_LongArrayInAPublicField_ThrowsZ3Exception()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<LongFieldCollectionEnvironment>()
+            .Where(t => t.Values[0] == 1L);
 
         // Act & Assert
-        Should.Throw<InvalidCastException>(() => theorem.Solve());
+        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#78): a collection that is null on a freshly constructed environment throws
+    /// <see cref="NullReferenceException"/>.
+    /// </summary>
+    /// <remarks>
+    /// The count is read straight off the value the member holds, with no null check, so an
+    /// environment that declares a collection without initialising it fails with nothing naming
+    /// the member at fault. This predates #53 - the property form below has always behaved this
+    /// way - so fixing #53 gave fields the same behaviour rather than introducing it.
+    /// These tests pin current behaviour and must be updated when the defect is fixed.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_NullCollectionInAPublicField_ThrowsNullReferenceException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<NullFieldCollectionEnvironment>();
+
+        // Act & Assert
+        Should.Throw<NullReferenceException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#78). The property form, which behaved this way before #53 was fixed too.
+    /// </summary>
+    [TestMethod]
+    public void Solve_NullCollectionInAPublicProperty_ThrowsNullReferenceException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<NullPropertyCollectionEnvironment>();
+
+        // Act & Assert
+        Should.Throw<NullReferenceException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#78): a collection in a tuple environment can never work.
+    /// </summary>
+    /// <remarks>
+    /// A <c>ValueTuple</c> exposes its elements as public fields, so a tuple environment takes the
+    /// branch #53 fixed. It still cannot hold a collection: the length comes from the instance,
+    /// the instance is created with <c>Activator.CreateInstance</c>, and a tuple has nowhere to
+    /// put an initialiser - so the element is always null. #78 is structural for tuples rather
+    /// than a matter of remembering to initialise something.
+    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_CollectionInAValueTupleEnvironment_ThrowsNullReferenceException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<(int[] Values, int Other)>().Where(t => t.Other == 1);
+
+        // Act & Assert
+        Should.Throw<NullReferenceException>(() => theorem.Solve());
     }
 
     /// <summary>
@@ -320,7 +559,52 @@ public class CollectionSymbolTests
     private sealed class FieldCollectionEnvironment
     {
         public int[] Values = new int[2];
+    }
 
-        public int Length { get; set; }
+    private sealed class FieldListEnvironment
+    {
+        public List<int> Values = [0, 0];
+    }
+
+    private sealed class FieldAndPropertyCollectionEnvironment
+    {
+        public int[] FieldValues = new int[1];
+
+        public int[] PropertyValues { get; set; } = new int[1];
+    }
+
+    private sealed class FieldCollectionHolder
+    {
+        public int[] Values = new int[2];
+    }
+
+    private sealed class NestedFieldCollectionEnvironment
+    {
+        public FieldCollectionHolder Inner { get; set; } = new();
+    }
+
+    private sealed class ReadOnlyFieldCollectionEnvironment
+    {
+        public readonly int[] Values = new int[2];
+    }
+
+    private sealed class EmptyFieldCollectionEnvironment
+    {
+        public int[] Values = [];
+    }
+
+    private sealed class LongFieldCollectionEnvironment
+    {
+        public long[] Values = new long[2];
+    }
+
+    private sealed class NullFieldCollectionEnvironment
+    {
+        public int[]? Values = null;
+    }
+
+    private sealed class NullPropertyCollectionEnvironment
+    {
+        public int[]? Values { get; set; }
     }
 }
