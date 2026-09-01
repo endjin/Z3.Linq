@@ -5,7 +5,8 @@ needed when building .NET solutions.
 
 $zerofailedExtensions = @(
     @{
-        # References the extension from its GitHub repository. If not already installed, use latest version from 'main' will be downloaded.
+        # References the extension from its GitHub repository. If it is not already installed, the
+        # latest version from 'main' is downloaded.
         Name = "ZeroFailed.Build.DotNet"
         GitRepository = "https://github.com/zerofailed/ZeroFailed.Build.DotNet"
         GitRef = "main"
