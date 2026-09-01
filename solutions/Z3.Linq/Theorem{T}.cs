@@ -35,9 +35,18 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// </summary>
     /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
     /// <remarks>
+    /// <para>
     /// A symbol that no constraint mentions is free: the theorem is still satisfiable, and Z3
     /// assigns the symbol an arbitrary value. Only the symbols the constraints pin down are
     /// determined by the query.
+    /// </para>
+    /// <para>
+    /// A <see cref="DateTime"/> symbol travels through Z3 as an instant on the UTC timeline and
+    /// comes back with <see cref="DateTimeKind.Utc"/>, whatever kind the constants constraining
+    /// it had. A constant whose kind is <see cref="DateTimeKind.Unspecified"/> is read as UTC
+    /// rather than as local time. The result is therefore the same on every machine; a caller
+    /// working in local time needs <see cref="DateTime.ToLocalTime"/> on the way out.
+    /// </para>
     /// </remarks>
     public T? Solve()
     {
