@@ -355,3 +355,4 @@ MigrationBackup/
 _codeCoverage/
 _packages/
 *.sbom.*
+.zf/extensions/
