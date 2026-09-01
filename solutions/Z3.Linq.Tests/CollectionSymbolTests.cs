@@ -14,9 +14,11 @@ namespace Z3.Linq.Tests;
 /// </para>
 /// <para>
 /// Only <c>int</c> elements work. Every other element type declares a domain or range that
-/// contradicts how the elements are constrained or read, and throws during translation; those
-/// cases are pinned below against #64. The Sudoku examples are all <c>int</c>, which is why the
-/// limitation has gone unnoticed.
+/// contradicts how the elements are constrained or read; those cases are pinned below against
+/// #64. Where they fail depends on the constraint - one naming a constant of the element type
+/// fails during translation, while elements left free solve cleanly and fail in the marshalling
+/// loop instead. The Sudoku examples are all <c>int</c>, which is why the limitation has gone
+/// unnoticed.
 /// </para>
 /// <para>
 /// A collection symbol can be a property or a public field, and since #53 the two behave
@@ -112,7 +114,7 @@ public class CollectionSymbolTests
     {
         // Arrange: the non-array branch, reached for a generic type implementing IEnumerable.
         // It is reconstructed by passing the element array to the collection's constructor
-        // (Theorem.cs:497), which List<int> supports.
+        // (Theorem.cs:496), which List<int> supports.
         using var context = new Z3Context();
 
         // Act
@@ -183,9 +185,13 @@ public class CollectionSymbolTests
     /// </summary>
     /// <remarks>
     /// The element loop has its own <c>TypeCode.Single</c> arm with the same defect #54 fixed on
-    /// the scalar path, and it was corrected in the same commit. No test can reach it: a float
-    /// array declares a floating-point range against a real-valued constraint and never survives
-    /// translation, exactly as a double array does not.
+    /// the scalar path, and it was corrected in the same commit. Nothing reaches the parse it
+    /// contains. The shape below fails during translation, because a float array declares a
+    /// floating-point range against a real-valued constraint, exactly as a double array does;
+    /// leaving the elements free instead gets past translation but no further than the cast on
+    /// the line before the parse, as
+    /// <see cref="Solve_DecimalArrayWithFreeElements_CastsTheElementNotTheArray"/> shows for the
+    /// neighbouring arm.
     /// This test pins current behaviour and must be updated when the defect is fixed.
     /// </remarks>
     [TestMethod]
@@ -202,12 +208,15 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#64), and the reason #55 cannot currently be observed.
+    /// KNOWN DEFECT (#64): a decimal array constrained against a decimal constant does not survive
+    /// translation.
     /// </summary>
     /// <remarks>
-    /// #55 describes the decimal element branch evaluating the whole array expression instead of
-    /// the selected element (Theorem.cs:474-477), which would give every element the same value.
-    /// That code is still wrong, but unreachable: a decimal array never survives translation.
+    /// This is the shape #64 lists, and the reason it concluded the element loop was unreachable
+    /// for a decimal. It is not the only shape: leaving the elements free reaches the loop, which
+    /// is where the three tests below observe the #55 fix.
+    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// </remarks>
     /// </remarks>
     [TestMethod]
     public void Solve_DecimalArraySymbol_ThrowsZ3Exception()
@@ -220,6 +229,98 @@ public class CollectionSymbolTests
 
         // Act & Assert
         Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// The defect in #55: the decimal arm of the element loop evaluated the whole array constant
+    /// instead of the element the loop had just selected.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every other arm of that loop reads <c>numValExpr</c>, the result of
+    /// <c>MkSelect(arrVal, MkInt(i))</c>. The decimal arm called <c>Eval</c> a second time on
+    /// <c>subEnv.Expr</c> - the array itself - and cast the result to
+    /// <see cref="Microsoft.Z3.RatNum"/>, which an array expression can never satisfy. The issue
+    /// describes the symptom as every element taking the same value or the cast failing; measured,
+    /// it is always the cast, in every shape a decimal collection can take.
+    /// </para>
+    /// <para>
+    /// A decimal collection still cannot be solved, because #64 declares its range as a
+    /// floating-point sort, so the assertion here is about which expression the cast rejects
+    /// rather than about a value. The load-bearing half is that the message no longer names an
+    /// array: that is #55, and reverting the fix fails on it. The element type it does name is
+    /// #64's sort mapping, and that half must be updated when #64 is fixed.
+    /// </para>
+    /// <para>
+    /// #64 records this code as unreachable. That holds only for a constraint naming a decimal
+    /// constant, which fails during translation; with the elements left free the theorem solves
+    /// and the element loop runs.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DecimalArrayWithFreeElements_CastsTheElementNotTheArray()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<DecimalArrayEnvironment>()
+            .Where(t => t.Length == 2);
+
+        // Act
+        InvalidCastException exception = Should.Throw<InvalidCastException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldNotContain("ArrayExpr");
+        exception.Message.ShouldContain("FPNum");
+    }
+
+    /// <summary>
+    /// A generic collection takes the same element loop as an array, so the #55 fix reaches it
+    /// too.
+    /// </summary>
+    /// <remarks>
+    /// Worth its own case because the collection branch materialises the result differently -
+    /// <c>Activator.CreateInstance</c> against the constructed type rather than
+    /// <c>ToArray</c> - and only the element read is shared.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DecimalListWithFreeElements_CastsTheElementNotTheArray()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<DecimalListEnvironment>()
+            .Where(t => t.Length == 2);
+
+        // Act
+        InvalidCastException exception = Should.Throw<InvalidCastException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldNotContain("ArrayExpr");
+        exception.Message.ShouldContain("FPNum");
+    }
+
+    /// <summary>
+    /// The element loop is reached by a theorem that genuinely constrains the elements, not only
+    /// by one that leaves them out of the constraints altogether.
+    /// </summary>
+    /// <remarks>
+    /// Relating two elements to each other puts both selects in the formula while naming no
+    /// decimal constant, so nothing forces the sort mismatch #64 describes and translation
+    /// succeeds. Without this the fix could be dismissed as only mattering to empty theorems.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DecimalArrayWithElementsConstrainedToEachOther_CastsTheElementNotTheArray()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<DecimalArrayEnvironment>()
+            .Where(t => t.Values[0] == t.Values[1]);
+
+        // Act
+        InvalidCastException exception = Should.Throw<InvalidCastException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldNotContain("ArrayExpr");
+        exception.Message.ShouldContain("FPNum");
     }
 
     /// <summary>
@@ -582,6 +683,13 @@ public class CollectionSymbolTests
     private sealed class DecimalArrayEnvironment
     {
         public decimal[] Values { get; set; } = new decimal[2];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class DecimalListEnvironment
+    {
+        public List<decimal> Values { get; set; } = [0m, 0m];
 
         public int Length { get; set; }
     }
