@@ -141,6 +141,61 @@ using (var ctx = new Z3Context())
 }
 ```
 
+### When there is no solution
+
+`Solve()` reports an unsatisfiable theorem by returning `default`. For a class environment such as
+`Symbols<int, int>` that is `null` and reads correctly. For a value type - a value tuple, a struct,
+a record struct - `default` is a fully populated instance with every symbol zero, which is also the
+answer to plenty of satisfiable theorems, and it cannot even be compared against `null`:
+
+```csharp
+using (var ctx = new Z3Context())
+{
+    var theorem = from t in ctx.NewTheorem<(int a, int b)>()
+                  where t.a == t.b && t.a > 4 && t.b < 2
+                  select t;
+
+    Console.WriteLine(theorem.Solve());   // (0, 0) - and so is a theorem solved by (0, 0)
+}
+```
+
+Use `TrySolve` where the difference matters. It works for every environment type:
+
+```csharp
+if (theorem.TrySolve(out var result))
+{
+    Console.WriteLine($"{result.a}, {result.b}");
+}
+else
+{
+    Console.WriteLine("No solution.");
+}
+```
+
+For a value-type environment, `SolveOrNull()` gives back a `Nullable<T>` instead, so the usual null
+checks apply:
+
+```csharp
+(int a, int b)? result = theorem.SolveOrNull();
+
+if (result is null)
+{
+    Console.WriteLine("No solution.");
+}
+```
+
+Both have optimisation counterparts - `TryOptimize` and `OptimizeOrNull` - and `TrySolve` is
+available on the deferred form an `orderby` query returns:
+
+```csharp
+var solveable = from t in ctx.NewTheorem<(int a, int b)>()
+                where t.a >= 5 && t.a <= 9
+                orderby t.a
+                select t;
+
+if (solveable.TrySolve(out var cheapest)) { /* ... */ }
+```
+
 ## Getting Started
 
 You can install the [Z3.Linq NuGet Package](https://www.nuget.org/packages/Z3.Linq/).

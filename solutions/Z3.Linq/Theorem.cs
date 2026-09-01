@@ -5,6 +5,7 @@ using Microsoft.Z3;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
@@ -69,8 +70,24 @@ public class Theorem
     /// Solves the theorem using Z3.
     /// </summary>
     /// <typeparam name="T">Theorem environment type.</typeparam>
-    /// <returns>Result of solving the theorem; default(T) if the theorem cannot be satisfied.</returns>
+    /// <returns>Result of solving the theorem; <c>default(T)</c> if the theorem cannot be satisfied.</returns>
+    /// <remarks>
+    /// For a value-type environment <c>default(T)</c> is a real, populated instance - all zeroes -
+    /// and so cannot be told apart from a solution in which every symbol happens to be zero. Use
+    /// <see cref="TrySolve{T}(out T)"/> where that matters. See #57.
+    /// </remarks>
     protected T? Solve<T>()
+    {
+        return this.TrySolve<T>(out T? result) ? result : default;
+    }
+
+    /// <summary>
+    /// Solves the theorem using Z3, reporting satisfiability separately from the solution.
+    /// </summary>
+    /// <typeparam name="T">Theorem environment type.</typeparam>
+    /// <param name="result">The solution, when the theorem could be satisfied.</param>
+    /// <returns><see langword="true"/> if the theorem was satisfiable; otherwise <see langword="false"/>.</returns>
+    protected bool TrySolve<T>([MaybeNullWhen(false)] out T result)
     {
         using Context ctx = this.context.CreateContext();
         var environment = GetEnvironment(ctx, typeof(T));
@@ -84,19 +101,45 @@ public class Theorem
 
         if (status != Status.SATISFIABLE)
         {
-            return default;
+            result = default;
+            return false;
         }
 
-        return GetSolution<T>(ctx, solver.Model, environment);
+        result = GetSolution<T>(ctx, solver.Model, environment);
+        return true;
     }
 
     /// <summary>
-    /// Solves the theorem using Z3.
+    /// Finds an optimal solution using Z3.
     /// </summary>
     /// <typeparam name="T">Theorem environment type.</typeparam>
     /// <typeparam name="TResult">The Theorem Result.</typeparam>
-    /// <returns>Result of solving the theorem; default(T) if the theorem cannot be satisfied.</returns>
-    protected T Optimize<T, TResult>(Optimization direction, Expression<Func<T, TResult>> lambda)
+    /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
+    /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
+    /// <returns>Result of solving the theorem; <c>default(T)</c> if the theorem cannot be satisfied.</returns>
+    /// <remarks>
+    /// Carries the same ambiguity as <see cref="Solve{T}"/> for a value-type environment. Use
+    /// <see cref="TryOptimize{T, TResult}(Optimization, Expression{Func{T, TResult}}, out T)"/>
+    /// where that matters. See #57.
+    /// </remarks>
+    protected T? Optimize<T, TResult>(Optimization direction, Expression<Func<T, TResult>> lambda)
+    {
+        return this.TryOptimize<T, TResult>(direction, lambda, out T? result) ? result : default;
+    }
+
+    /// <summary>
+    /// Finds an optimal solution using Z3, reporting satisfiability separately from the solution.
+    /// </summary>
+    /// <typeparam name="T">Theorem environment type.</typeparam>
+    /// <typeparam name="TResult">The Theorem Result.</typeparam>
+    /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
+    /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
+    /// <param name="result">The optimal solution, when the theorem could be satisfied.</param>
+    /// <returns><see langword="true"/> if the theorem was satisfiable; otherwise <see langword="false"/>.</returns>
+    protected bool TryOptimize<T, TResult>(
+        Optimization direction,
+        Expression<Func<T, TResult>> lambda,
+        [MaybeNullWhen(false)] out T result)
     {
         using Context ctx = this.context.CreateContext();
         var environment = GetEnvironment(ctx, typeof(T));
@@ -123,10 +166,12 @@ public class Theorem
 
         if (status != Status.SATISFIABLE)
         {
-            return default!;
+            result = default;
+            return false;
         }
 
-        return GetSolution<T>(ctx, optimizer.Model, environment);
+        result = GetSolution<T>(ctx, optimizer.Model, environment);
+        return true;
     }
 
     /// <summary>
