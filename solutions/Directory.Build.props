@@ -10,8 +10,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <!-- Package metadata common to the packable projects. Per-package values
-       (Description, PackageTags) stay in the individual project files. -->
+  <!-- Package metadata common to the packable projects. Per-package values stay in the
+       individual project files: PackageTags, plus Description (Z3.Linq) or
+       PackageDescription (Z3.Linq.Examples) - MSBuild accepts either for the package
+       description. -->
   <PropertyGroup>
     <Authors>bartdesmet, endjin, Ricardo Niepel, Jean-Sylvain Boige, Karel Frajtak</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
