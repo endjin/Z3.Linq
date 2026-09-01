@@ -16,6 +16,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Z3.Linq\Z3.Linq.csproj" />
+    <!-- The acceptance tests solve the sample theorems as published. Examples adds no packages
+         of its own; it references only Z3.Linq. -->
+    <ProjectReference Include="..\Z3.Linq.Examples\Z3.Linq.Examples.csproj" />
   </ItemGroup>
 
 </Project>
