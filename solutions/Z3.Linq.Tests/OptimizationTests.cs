@@ -281,7 +281,7 @@ public class OptimizationTests
     /// reference environment, a null the compiler had been told could not happen, so the caller
     /// dereferenced it and got a <see cref="NullReferenceException"/> far from the cause. The
     /// value has not changed; what changed is that the declaration now admits it, which turned
-    /// six unchecked dereferences in this very file into compiler errors.
+    /// ten unchecked dereferences across six tests in this very file into compiler errors.
     /// </remarks>
     [TestMethod]
     public void Optimize_WithUnsatisfiableTheorem_ReturnsNull()
