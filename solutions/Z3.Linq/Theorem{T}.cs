@@ -34,6 +34,11 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// Solves the theorem.
     /// </summary>
     /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
+    /// <remarks>
+    /// A symbol that no constraint mentions is free: the theorem is still satisfiable, and Z3
+    /// assigns the symbol an arbitrary value. Only the symbols the constraints pin down are
+    /// determined by the query.
+    /// </remarks>
     public T? Solve()
     {
         return base.Solve<T>();
@@ -45,6 +50,10 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
     /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
     /// <returns>Environment type instance with properties set to theorem-satisfying values.</returns>
+    /// <remarks>
+    /// As with <see cref="Solve"/>, a symbol that no constraint mentions is free and takes an
+    /// arbitrary value; the objective determines only what it is written in terms of.
+    /// </remarks>
     public T Optimize<TResult>(Optimization direction, Expression<Func<T, TResult>> lambda)
     {
         return base.Optimize<T, TResult>(direction, lambda);

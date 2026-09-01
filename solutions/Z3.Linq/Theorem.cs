@@ -442,7 +442,7 @@ public class Theorem
 
                 for (int i = 0; i < existingLength; i++)
                 {
-                    var numValExpr = model.Eval(context.MkSelect(arrVal, context.MkInt(i)));
+                    var numValExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
 
                     object numVal;
 
@@ -468,9 +468,9 @@ public class Theorem
                             numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
                             break;
                         case TypeCode.Decimal:
-                            Expr val = model.Eval((subEnv.Expr ?? throw new ArgumentException(
+                            Expr val = EvaluateWithCompletion(model, subEnv.Expr ?? throw new ArgumentException(
                     $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
-                    nameof(subEnv))));
+                    nameof(subEnv)));
                             string numValue = ((RatNum)val).ToDecimalString(128);
 
                             ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
@@ -504,7 +504,7 @@ public class Theorem
                 $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
                 nameof(subEnv));
 
-            Expr val = model.Eval(subEnvExpr);
+            Expr val = EvaluateWithCompletion(model, subEnvExpr);
 
             switch (typeCode)
             {
@@ -631,7 +631,7 @@ public class Theorem
                 // Evaluation of the values though the handle in the environment bindings.
                 var subEnv = environment.Properties[parameter];
 
-                Expr val = model.Eval(subEnv.Expr);
+                Expr val = EvaluateWithCompletion(model, subEnv.Expr);
                 if (parameter.PropertyType == typeof(bool))
                 {
                     field.SetValue(result, val.IsTrue);
@@ -697,4 +697,30 @@ public class Theorem
             return result;
         }
     }
+
+    /// <summary>
+    /// Evaluates an expression under a model, supplying a value for any term the model has no
+    /// interpretation for.
+    /// </summary>
+    /// <param name="model">Z3 model to evaluate under.</param>
+    /// <param name="expr">Term to evaluate.</param>
+    /// <returns>The model value of <paramref name="expr"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// A Z3 model is partial: it assigns values only to the constants the solver actually
+    /// needed. Evaluating one it does not interpret hands back the term itself - an
+    /// <c>IntExpr</c> rather than an <c>IntNum</c> - and the casts in the marshalling switches
+    /// above then fail. The condition is not "no constraint mentions it" but "the model does
+    /// not interpret it": a constraint the solver simplifies away, such as x == x, leaves its
+    /// symbol uninterpreted just the same.
+    /// </para>
+    /// <para>
+    /// Such a theorem is still satisfiable and its free symbols may take any value, so
+    /// completion is enabled and Z3 supplies one. Completion only fills gaps - it never
+    /// overrides a value the solver chose - so symbols the model does interpret are
+    /// unaffected. See https://github.com/endjin/Z3.Linq/issues/51.
+    /// </para>
+    /// </remarks>
+    private static Expr EvaluateWithCompletion(Model model, Expr? expr)
+        => model.Eval(expr, completion: true);
 }

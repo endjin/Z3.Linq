@@ -263,6 +263,58 @@ public class EnvironmentTypeTests
         result.B.ShouldBe(4);
     }
 
+    /// <summary>
+    /// An anonymous environment with an unconstrained property is still populated.
+    /// </summary>
+    /// <remarks>
+    /// The anonymous path writes to compiler-generated backing fields and evaluates the model
+    /// through its own call, separate from the one every other environment shape uses. So it
+    /// failed independently under #51 and it can regress independently: this is the only test
+    /// covering that call. Only <c>flag</c> is asserted - <c>n</c> is free and takes whatever
+    /// completion supplies.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_AnonymousTypeWithAnUnconstrainedProperty_PopulatesTheConstrainedOne()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new { flag = default(bool), n = default(int) })
+            .Where(t => t.flag)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.flag.ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// A nested environment whose inner properties are unconstrained is still constructed.
+    /// </summary>
+    /// <remarks>
+    /// The nested environment is built from the type, not from the constraints, so every inner
+    /// symbol exists whether or not anything mentions it - and each is marshalled by the same
+    /// recursion that handles a top-level one. Before #51 a single free leaf anywhere in the
+    /// tree failed the whole solve.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_NestedObjectEnvironmentWithUnconstrainedInnerProperties_PopulatesTheOuterOne()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<OuterEnvironment>()
+            .Where(t => t.Top == 6)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Inner.ShouldNotBeNull();
+        result.Top.ShouldBe(6);
+    }
+
     private sealed record BodyRecord
     {
         public bool X { get; set; }
