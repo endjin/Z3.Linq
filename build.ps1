@@ -70,10 +70,10 @@ param (
     [string] $ZfModulePath,
 
     [Parameter()]
-    [string] $ZfModuleVersion = "1.0.6",
+    [string] $ZfModuleVersion = "1.0.7",
 
     [Parameter()]
-    [version] $InvokeBuildModuleVersion = "5.14.22"
+    [version] $InvokeBuildModuleVersion = "5.14.23"
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $PSCommandPath
