@@ -6,7 +6,7 @@ Based on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) w
 
 ## Examples
 
-A number of examples are included in this solution, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires [Visual Studio Code](https://code.visualstudio.com/)) or [from Visual Studio](solutions/Z3.Linq.Demo/Program.cs).
+A number of examples are included, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires [Visual Studio Code](https://code.visualstudio.com/)), or as standalone [Spectre.Console](https://spectreconsole.net/) demos in [`demos/`](demos). Each demo is a single-file .NET app - run the interactive launcher with `dotnet run demos/menu.cs`, or run any one directly, e.g. `dotnet run demos/sudoku.cs`. See the [demos README](demos/README.md) for the full list.
 
 ### Problem - 1st Order Propositional Logic
 

@@ -10,7 +10,6 @@
   </Folder>
   <Project Path="Z3.Linq/Z3.Linq.csproj" />
   <Project Path="Z3.Linq.Examples/Z3.Linq.Examples.csproj" />
-  <Project Path="Z3.Linq.Demo/Z3.Linq.Demo.csproj" />
   <Project Path="Z3.Linq.Tests/Z3.Linq.Tests.csproj" />
   <Project Path="Z3.Linq.Benchmarks/Z3.Linq.Benchmarks.csproj" />
 </Solution>
