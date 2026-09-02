@@ -353,11 +353,13 @@ internal sealed class ExpressionVisitor
     {
         var method = call.Method;
 
-        // Does the method have a rewriter attribute applied?
-        var rewriterAttr = method.GetCustomAttributes<TheoremPredicateRewriterAttribute>(false).SingleOrDefault();
-
-        if (rewriterAttr != null)
+        // Does the method have a rewriter attribute applied? IsDefined is checked first so a call
+        // to an ordinary method - the common case, hit once per call node in every constraint -
+        // does not allocate an attribute array; the attribute is read only when one is present.
+        if (method.IsDefined(typeof(TheoremPredicateRewriterAttribute), false))
         {
+            var rewriterAttr = method.GetCustomAttributes<TheoremPredicateRewriterAttribute>(false).Single();
+
             // Make sure the specified rewriter type implements the ITheoremPredicateRewriter.
             var rewriterType = rewriterAttr.RewriterType;
 
