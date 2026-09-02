@@ -6,7 +6,13 @@ Based on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) w
 
 ## Examples
 
-A number of examples are included, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires [Visual Studio Code](https://code.visualstudio.com/)), or as standalone [Spectre.Console](https://spectreconsole.net/) demos in [`demos/`](demos). Each demo is a single-file .NET app - run the interactive launcher with `dotnet run demos/menu.cs`, or run any one directly, e.g. `dotnet run demos/sudoku.cs`. See the [demos README](demos/README.md) for the full list.
+A number of examples are included, available two ways:
+
+- **Standalone demos** in [`demos/`](demos) - single-file [Spectre.Console](https://spectreconsole.net/) apps that need no extra tooling. Run the interactive launcher with `dotnet run demos/menu.cs`, or run any one directly, e.g. `dotnet run demos/sudoku.cs`; see the [demos README](demos/README.md) for the full list. This is the simplest way to run them.
+- **A [Polyglot Notebook](examples/z3-problems.dib)** (`examples/z3-problems.dib`) for [Visual Studio Code](https://code.visualstudio.com/).
+
+> [!NOTE]
+> The notebook was written for **Polyglot Notebooks** (formerly *.NET Interactive Notebooks*). Microsoft [announced the deprecation of Polyglot Notebooks and .NET Interactive in early 2026](https://github.com/dotnet/interactive/issues/4163) and [archived the `dotnet/interactive` repository](https://github.com/dotnet/interactive) (read-only since April 2026); the extension still opens the notebook for now but is no longer maintained. As of this writing there is **no community-maintained fork** - a fork has only been [discussed](https://github.com/dotnet/interactive/issues/4195), not established. The `demos/` above don't depend on the notebook tooling and are the maintained way to run the examples.
 
 ### Problem - 1st Order Propositional Logic
 
