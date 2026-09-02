@@ -38,7 +38,7 @@ public class Theorem
     /// </summary>
     /// <param name="context">Z3 context.</param>
     protected Theorem(Z3Context context)
-        : this(context, new List<LambdaExpression>(), null)
+        : this(context, [], null)
     {
     }
 
@@ -895,25 +895,25 @@ public class Theorem
         {
             if (parameter is PropertyInfo propertyInfo)
             {
-                var ctor = propertyInfo.PropertyType.GetConstructor(new Type[] { parameterType });
+                var ctor = propertyInfo.PropertyType.GetConstructor([parameterType]);
 
                 if (ctor == null)
                 {
                     throw new InvalidOperationException("Could not construct an instance of the mapped type " + propertyInfo.PropertyType.Name + ". No public constructor with parameter type " + parameterType + " found.");
                 }
 
-                value = ctor.Invoke(new object[] { value! });
+                value = ctor.Invoke([value!]);
             }
             if (parameter is FieldInfo fieldInfo)
             {
-                var ctor = fieldInfo.FieldType.GetConstructor(new Type[] { parameterType });
+                var ctor = fieldInfo.FieldType.GetConstructor([parameterType]);
 
                 if (ctor == null)
                 {
                     throw new InvalidOperationException("Could not construct an instance of the mapped type " + fieldInfo.FieldType.Name + ". No public constructor with parameter type " + parameterType + " found.");
                 }
 
-                value = ctor.Invoke(new object[] { value! });
+                value = ctor.Invoke([value!]);
             }
         }
 
@@ -1041,42 +1041,19 @@ public class Theorem
 
             foreach (var parameter in environment.Properties.Keys)
             {
-                if (parameter is PropertyInfo)
+                var subEnv = environment.Properties[parameter];
+
+                // Evaluation of the values through the handle in the environment bindings.
+                object value = ConvertZ3Expression(result, context, model, subEnv, parameter, GetMemberValue(parameter, template));
+
+                switch (parameter)
                 {
-                    var prop = parameter as PropertyInfo;
-
-                    if (prop == null) 
-                    {
-                        continue;
-                    }
-
-                    // Evaluation of the values though the handle in the environment bindings.
-                    object value;
-
-                    var subEnv = environment.Properties[prop];
-
-                    value = ConvertZ3Expression(result, context, model, subEnv, prop, GetMemberValue(prop, template));
-
-                    prop.SetValue(result, value, null);
-                }
-
-                if (parameter is FieldInfo)
-                {
-                    var prop = parameter as FieldInfo;
-
-                    if (prop == null)
-                    {
-                        continue;
-                    }
-
-                    // Evaluation of the values though the handle in the environment bindings.
-                    object value;
-
-                    var subEnv = environment.Properties[prop];
-
-                    value = ConvertZ3Expression(result, context, model, subEnv, prop, GetMemberValue(prop, template));
-
-                    prop.SetValue(result, value);
+                    case PropertyInfo prop:
+                        prop.SetValue(result, value, null);
+                        break;
+                    case FieldInfo field:
+                        field.SetValue(result, value);
+                        break;
                 }
             }
 

@@ -524,7 +524,7 @@ internal sealed class ExpressionVisitor
         // E.g. Symbols l = ...;
         //      theorem.Where(s => l.X1)
         //                         ^^
-        var hierarchy = new List<MemberExpression>();
+        List<MemberExpression> hierarchy = [];
         var mExp = member;
         hierarchy.Add(mExp);
 
