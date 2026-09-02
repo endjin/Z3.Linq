@@ -26,7 +26,8 @@ using (var ctx = new Z3Context())
                   where t.X1 == (2 * t.X3) + t.X2
                   select t;
 
-    var (r, ms) = Time(() => theorem.Solve());
+    // Solve() returns T?, null only when unsatisfiable; ! since Symbols<...> is a reference type.
+    var (r, ms) = Time(() => theorem.Solve()!);
     Section("Bart's example (TechEd Europe 2012)",
         ["x1 - x2 >= 1", "x1 - x2 <= 3", "x1 == 2*x3 + x2"],
         [("x1", r.X1), ("x2", r.X2), ("x3", r.X3)], ms);
@@ -56,7 +57,7 @@ using (var ctx = new Z3Context())
                   where t.X1 != t.X2
                   select t;
 
-    var (r, ms) = Time(() => theorem.Solve());
+    var (r, ms) = Time(() => theorem.Solve()!);
     Section("A Symbols<int, int> example",
         ["x1 < x2 + 1", "x1 > 2", "x1 != x2"],
         [("x1", r.X1), ("x2", r.X2)], ms);

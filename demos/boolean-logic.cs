@@ -36,7 +36,9 @@ using (var ctx = new Z3Context())
     var theorem = from t in ctx.NewTheorem(new { x = default(bool), y = default(bool) })
                   where t.x ^ t.y
                   select t;
-    var (r, ms) = Time(() => theorem.Solve());
+    // Solve() returns T?, null only when unsatisfiable - which x ^ y never is. The ! is needed
+    // for the reference-type environments (this and the record below); the value tuple is not null.
+    var (r, ms) = Time(() => theorem.Solve()!);
     table.AddRow("[grey]anonymous type[/]", Bool(r.x), Bool(r.y), Bool(r.x ^ r.y), Ms(ms));
 }
 
@@ -54,7 +56,7 @@ using (var ctx = new Z3Context())
     var theorem = from t in ctx.NewTheorem(new RecordTheorem<bool, bool>())
                   where t.X ^ t.Y
                   select t;
-    var (r, ms) = Time(() => theorem.Solve());
+    var (r, ms) = Time(() => theorem.Solve()!);
     table.AddRow("[grey]record[/]", Bool(r.X), Bool(r.Y), Bool(r.X ^ r.Y), Ms(ms));
 }
 
