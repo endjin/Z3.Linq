@@ -636,12 +636,7 @@ public class Theorem
             _ => throw new NotSupportedException(),
         };
 
-        TheoremVariableTypeMappingAttribute? parameterTypeMapping = GetTypeMapping(parameterType);
-
-        if (parameterTypeMapping != null)
-        {
-            parameterType = parameterTypeMapping.RegularType;
-        }
+        parameterType = GetTypeMapping(parameterType)?.RegularType ?? parameterType;
 
         // Map the environment onto Z3-compatible types.
         Expr constrExp;
@@ -693,11 +688,7 @@ public class Theorem
         };
 
         TheoremVariableTypeMappingAttribute? parameterTypeMapping = GetTypeMapping(parameterType);
-
-        if (parameterTypeMapping != null)
-        {
-            parameterType = parameterTypeMapping.RegularType;
-        }
+        parameterType = parameterTypeMapping?.RegularType ?? parameterType;
 
         object value;
         TypeCode typeCode = Type.GetTypeCode(parameterType);
@@ -705,12 +696,8 @@ public class Theorem
         {
             if (IsCollection(parameterType))
             {
-                Type eltType = parameterType.IsArray ? parameterType.GetElementType()! : parameterType.GetGenericArguments()[0];
-
-                if (eltType == null)
-                {
-                    throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
-                }
+                Type eltType = (parameterType.IsArray ? parameterType.GetElementType() : parameterType.GetGenericArguments()[0])
+                    ?? throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
 
                 var arrVal = (ArrayExpr)(subEnv.Expr ?? throw new ArgumentException(
                     $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
@@ -895,23 +882,15 @@ public class Theorem
         {
             if (parameter is PropertyInfo propertyInfo)
             {
-                var ctor = propertyInfo.PropertyType.GetConstructor([parameterType]);
-
-                if (ctor == null)
-                {
-                    throw new InvalidOperationException("Could not construct an instance of the mapped type " + propertyInfo.PropertyType.Name + ". No public constructor with parameter type " + parameterType + " found.");
-                }
+                var ctor = propertyInfo.PropertyType.GetConstructor([parameterType])
+                    ?? throw new InvalidOperationException("Could not construct an instance of the mapped type " + propertyInfo.PropertyType.Name + ". No public constructor with parameter type " + parameterType + " found.");
 
                 value = ctor.Invoke([value!]);
             }
             if (parameter is FieldInfo fieldInfo)
             {
-                var ctor = fieldInfo.FieldType.GetConstructor([parameterType]);
-
-                if (ctor == null)
-                {
-                    throw new InvalidOperationException("Could not construct an instance of the mapped type " + fieldInfo.FieldType.Name + ". No public constructor with parameter type " + parameterType + " found.");
-                }
+                var ctor = fieldInfo.FieldType.GetConstructor([parameterType])
+                    ?? throw new InvalidOperationException("Could not construct an instance of the mapped type " + fieldInfo.FieldType.Name + ". No public constructor with parameter type " + parameterType + " found.");
 
                 value = ctor.Invoke([value!]);
             }

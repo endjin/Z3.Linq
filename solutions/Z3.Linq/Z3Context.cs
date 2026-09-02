@@ -197,9 +197,6 @@ public sealed class Z3Context : IDisposable
     /// <param name="s">Log output string.</param>
     internal void LogWriteLine(string s)
     {
-        if (Log != null)
-        {
-            Log.WriteLine(s);
-        }
+        Log?.WriteLine(s);
     }
 }

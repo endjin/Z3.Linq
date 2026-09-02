@@ -557,12 +557,7 @@ internal sealed class ExpressionVisitor
                     hierarchyIdx++;
                 }
 
-                if (val != null)
-                {
-                    return VisitConstantValue(val);
-                }
-
-                throw new NotSupportedException($"Could not reduce expression {topMember.Expression}");
+                return VisitConstantValue(val ?? throw new NotSupportedException($"Could not reduce expression {topMember.Expression}"));
             }
         }
 
