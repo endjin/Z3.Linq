@@ -472,40 +472,36 @@ internal sealed class ExpressionVisitor
     /// <returns>Z3 expression handle.</returns>
     private Expr VisitConstantValue(object val)
     {
-        switch (Type.GetTypeCode(val.GetType()))
+        TypeCode typeCode = Type.GetTypeCode(val.GetType());
+
+        return typeCode switch
         {
-            case TypeCode.SByte:
-            case TypeCode.Byte:
-            case TypeCode.Int16:
-            case TypeCode.UInt16:
-            case TypeCode.Int32:
-            case TypeCode.Int64:
-                return this.context.MkInt(Convert.ToInt64(val));
-            case TypeCode.UInt32:
-            case TypeCode.UInt64:
-                // uint and ulong are bit-vectors of their width. See #99's bit-vector follow-up.
-                return this.context.MkBV(Convert.ToUInt64(val), Theorem.BitVectorWidth(Type.GetTypeCode(val.GetType()))!.Value);
-            case TypeCode.Boolean:
-                return this.context.MkBool((bool)val);
-            case TypeCode.Single:
-            case TypeCode.Double:
-            case TypeCode.Decimal:
-                // Invariant, not current: Z3's parser accepts only '.' as the decimal separator,
-                // and about half of all cultures render 1.5 as something else. See #52.
-                return this.context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture));
-            case TypeCode.DateTime:
-                // A DateTime is encoded as its ticks - 100ns intervals from 0001-01-01 - on the UTC
-                // timeline, which covers the whole DateTime range. A Windows file time counted from
-                // 1601 instead, so nothing earlier could be written or read. See #83.
-                //
-                // A Kind of Local is converted to UTC first; Unspecified is taken to be UTC already,
-                // which is the convention ToFileTimeUtc had and the read path inverts. See #56.
-                return this.context.MkInt(ToUtcTicks((DateTime)val));
-            case TypeCode.String:
-                return this.context.MkString((string)val);
-            default:
-                throw new NotSupportedException($"Unsupported constant {val}");
-        }
+            TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.Int64
+                => this.context.MkInt(Convert.ToInt64(val)),
+
+            // uint and ulong are bit-vectors of their width. See #99's bit-vector follow-up.
+            TypeCode.UInt32 or TypeCode.UInt64
+                => this.context.MkBV(Convert.ToUInt64(val), Theorem.BitVectorWidth(typeCode)!.Value),
+
+            TypeCode.Boolean => this.context.MkBool((bool)val),
+
+            // Invariant, not current: Z3's parser accepts only '.' as the decimal separator,
+            // and about half of all cultures render 1.5 as something else. See #52.
+            TypeCode.Single or TypeCode.Double or TypeCode.Decimal
+                => this.context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture)),
+
+            // A DateTime is encoded as its ticks - 100ns intervals from 0001-01-01 - on the UTC
+            // timeline, which covers the whole DateTime range. A Windows file time counted from
+            // 1601 instead, so nothing earlier could be written or read. See #83.
+            //
+            // A Kind of Local is converted to UTC first; Unspecified is taken to be UTC already,
+            // which is the convention ToFileTimeUtc had and the read path inverts. See #56.
+            TypeCode.DateTime => this.context.MkInt(ToUtcTicks((DateTime)val)),
+
+            TypeCode.String => this.context.MkString((string)val),
+
+            _ => throw new NotSupportedException($"Unsupported constant {val}"),
+        };
     }
 
     private Expr VisitIndex(IndexExpression expression, Func<Context, Expr, Expr[], Expr> ctor)
@@ -551,19 +547,12 @@ internal sealed class ExpressionVisitor
                 {
                     var currentMember = hierarchy[hierarchyIdx].Member;
 
-                    switch (currentMember.MemberType)
+                    val = currentMember switch
                     {
-                        case MemberTypes.Property:
-                            var property = (PropertyInfo)currentMember;
-                            val = property.GetValue(target);
-                            break;
-                        case MemberTypes.Field:
-                            var field = (FieldInfo)currentMember;
-                            val = field.GetValue(target);
-                            break;
-                        default:
-                            throw new NotSupportedException($"Unsupported constant {target} .");
-                    }
+                        PropertyInfo property => property.GetValue(target),
+                        FieldInfo field => field.GetValue(target),
+                        _ => throw new NotSupportedException($"Unsupported constant {target} ."),
+                    };
 
                     hierarchyIdx++;
                 }
