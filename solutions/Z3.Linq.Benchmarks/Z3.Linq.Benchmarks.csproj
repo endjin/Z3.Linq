@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Z3.Linq.Benchmarks</RootNamespace>
+    <!-- Benchmark classes and methods are the surface of a runnable tool, driven by
+         BenchmarkDotNet's attributes, not a public API - a doc comment on each [Benchmark] would
+         add nothing. The comments they do carry are still validated (Directory.Build.props). -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- BenchmarkDotNet refuses to run outside Release; building in any configuration is fine. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Z3.Linq\Z3.Linq.csproj" />
+  </ItemGroup>
+
+</Project>
