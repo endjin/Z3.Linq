@@ -726,75 +726,12 @@ public class Theorem
                 // are still boxed to pass through SetValue, as they were to pass through Add.
                 Array results = Array.CreateInstance(eltType, existingLength);
 
+                TypeCode eltTypeCode = Type.GetTypeCode(eltType);
+
                 for (int i = 0; i < existingLength; i++)
                 {
                     var numValExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
-
-                    object numVal;
-
-                    switch (Type.GetTypeCode(eltType))
-                    {
-                        case TypeCode.String:
-                            numVal = numValExpr.String;
-                            break;
-                        case TypeCode.Int16:
-                            // Checked: an element is not bounded to the range of its type - #87
-                            // bounds scalars only - so Z3 can pick a value no short can hold, and
-                            // an unchecked cast would wrap it into a plausible wrong answer. See #63.
-                            numVal = checked((short)((IntNum)numValExpr).Int);
-                            break;
-                        case TypeCode.SByte:
-                            numVal = checked((sbyte)((IntNum)numValExpr).Int);
-                            break;
-                        case TypeCode.Byte:
-                            numVal = checked((byte)((IntNum)numValExpr).Int);
-                            break;
-                        case TypeCode.UInt16:
-                            numVal = checked((ushort)((IntNum)numValExpr).Int);
-                            break;
-                        case TypeCode.Int32:
-                            numVal = ((IntNum)numValExpr).Int;
-                            break;
-                        case TypeCode.Int64:
-                            numVal = ((IntNum)numValExpr).Int64;
-                            break;
-                        case TypeCode.UInt32:
-                            numVal = (uint)((BitVecNum)numValExpr).UInt64;
-                            break;
-                        case TypeCode.UInt64:
-                            numVal = ((BitVecNum)numValExpr).UInt64;
-                            break;
-                        case TypeCode.DateTime:
-                            // Ticks on the UTC timeline, for the reason given on the scalar arm below.
-                            numVal = ToDateTime(((IntNum)numValExpr).Int64, parameter.Name);
-                            break;
-                        case TypeCode.Boolean:
-                            numVal = numValExpr.IsTrue;
-                            break;
-                        case TypeCode.Single:
-                            numVal = float.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
-                            break;
-                        case TypeCode.Decimal:
-                            // Read the element the loop selected, not the array constant it was
-                            // selected from - every other arm here uses numValExpr. See #55.
-                            string numValue = ((RatNum)numValExpr).ToDecimalString(128);
-
-                            ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
-                            if (numValue.EndsWith('?'))
-                            {
-                                numValueSpan = numValueSpan[..^1];
-                            }
-
-                            numVal = decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
-                            break;
-                        case TypeCode.Double:
-                            numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
-                            break;
-                        default:
-                            throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
-                    }
-
-                    results.SetValue(numVal, i);
+                    results.SetValue(ReadZ3Value(numValExpr, eltTypeCode, parameter.Name, eltType), i);
                 }
 
                 value = parameterType.IsArray ? results : Activator.CreateInstance(parameterType, results)!;
@@ -811,73 +748,7 @@ public class Theorem
                 nameof(subEnv));
 
             Expr val = EvaluateWithCompletion(model, subEnvExpr);
-
-            switch (typeCode)
-            {
-                case TypeCode.String:
-                    value = val.String;
-                    break;
-                case TypeCode.Int16:
-                    // Int16 cannot share the Int32 arm: the model value is an int, and reflection
-                    // refuses to write an int to a short member. The cast is checked as a defence:
-                    // since #87 a scalar short is bounded to its range when the constraints are
-                    // asserted, so the check cannot fire here, but it costs nothing and the element
-                    // arm above still depends on it. See #63.
-                    value = checked((short)((IntNum)val).Int);
-                    break;
-                case TypeCode.SByte:
-                    value = checked((sbyte)((IntNum)val).Int);
-                    break;
-                case TypeCode.Byte:
-                    value = checked((byte)((IntNum)val).Int);
-                    break;
-                case TypeCode.UInt16:
-                    value = checked((ushort)((IntNum)val).Int);
-                    break;
-                case TypeCode.Int32:
-                    value = ((IntNum)val).Int;
-                    break;
-                case TypeCode.Int64:
-                    value = ((IntNum)val).Int64;
-                    break;
-                case TypeCode.UInt32:
-                    value = (uint)((BitVecNum)val).UInt64;
-                    break;
-                case TypeCode.UInt64:
-                    value = ((BitVecNum)val).UInt64;
-                    break;
-                case TypeCode.DateTime:
-                    // The write path encodes the instant as its ticks on the UTC timeline
-                    // (ExpressionVisitor.ToUtcTicks), so the value is read back as UTC from the
-                    // same ticks. It used to be a Windows file time, read with FromFileTimeUtc, which
-                    // could express nothing before 1601. See #56 and #83.
-                    value = ToDateTime(((IntNum)val).Int64, parameter.Name);
-                    break;
-                case TypeCode.Boolean:
-                    value = val.IsTrue;
-                    break;
-                case TypeCode.Single:
-                    value = float.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
-                    break;
-                case TypeCode.Decimal:
-
-                    string decValue = ((RatNum)val).ToDecimalString(128);
-
-                    ReadOnlySpan<char> decValueSpan = decValue.AsSpan();
-                    if (decValue.EndsWith('?'))
-                    {
-                        decValueSpan = decValueSpan[..^1];
-                    }
-
-                    value = decimal.Parse(decValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
-                    break;
-                case TypeCode.Double:
-                    value = double.Parse(((RatNum)val).ToDecimalString(64), CultureInfo.InvariantCulture);
-                    break;
-
-                default:
-                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ".");
-            }
+            value = ReadZ3Value(val, typeCode, parameter.Name, null);
         }
 
         // If there was a type mapping, we need to convert back to the original type.
@@ -938,6 +809,71 @@ public class Theorem
             FieldInfo field => field.GetValue(instance),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Reads the CLR value of a solved symbol from the term the model evaluated it to - the one
+    /// reader the scalar path and the collection-element path share.
+    /// </summary>
+    /// <param name="expr">The model value of the symbol, or of one collection element.</param>
+    /// <param name="typeCode">The type code of the CLR type to read it as.</param>
+    /// <param name="symbolName">The symbol's name, for the diagnostics.</param>
+    /// <param name="elementType">
+    /// The element type when reading a collection element, or <see langword="null"/> for a scalar.
+    /// It only shapes the "unsupported type" message; the two paths read every supported type
+    /// identically.
+    /// </param>
+    /// <returns>The boxed CLR value.</returns>
+    /// <remarks>
+    /// A bounded integer is read with a checked cast. #87 bounds a scalar symbol to its type's
+    /// range, so a scalar can never be out of range here; a collection element is not bounded - its
+    /// length is not known when the constraints are asserted - so Z3 can pick a value no such type
+    /// can hold, and the checked cast makes that loud rather than wrapping it into a plausible wrong
+    /// answer. A <see cref="DateTime"/> is read from its ticks on the UTC timeline, the encoding the
+    /// write path uses. See #63, #83 and #87.
+    /// </remarks>
+    private static object ReadZ3Value(Expr expr, TypeCode typeCode, string symbolName, Type? elementType)
+    {
+        return typeCode switch
+        {
+            TypeCode.String => expr.String,
+            TypeCode.Int16 => checked((short)((IntNum)expr).Int),
+            TypeCode.SByte => checked((sbyte)((IntNum)expr).Int),
+            TypeCode.Byte => checked((byte)((IntNum)expr).Int),
+            TypeCode.UInt16 => checked((ushort)((IntNum)expr).Int),
+            TypeCode.Int32 => ((IntNum)expr).Int,
+            TypeCode.Int64 => ((IntNum)expr).Int64,
+            TypeCode.UInt32 => (uint)((BitVecNum)expr).UInt64,
+            TypeCode.UInt64 => ((BitVecNum)expr).UInt64,
+            TypeCode.DateTime => ToDateTime(((IntNum)expr).Int64, symbolName),
+            TypeCode.Boolean => expr.IsTrue,
+            TypeCode.Single => float.Parse(((RatNum)expr).ToDecimalString(32), CultureInfo.InvariantCulture),
+            TypeCode.Decimal => ParseZ3Decimal(((RatNum)expr).ToDecimalString(128)),
+            TypeCode.Double => double.Parse(((RatNum)expr).ToDecimalString(64), CultureInfo.InvariantCulture),
+            _ => throw new NotSupportedException(elementType is null
+                ? "Unsupported parameter type for " + symbolName + "."
+                : $"Unsupported array parameter type for {symbolName} and array element type {elementType.Name}."),
+        };
+    }
+
+    /// <summary>
+    /// Parses the decimal string Z3 renders a real as into a <see cref="decimal"/>.
+    /// </summary>
+    /// <param name="value">The string from <c>RatNum.ToDecimalString</c>.</param>
+    /// <returns>The parsed value.</returns>
+    /// <remarks>
+    /// Z3 marks an inexact value with a trailing <c>?</c>, which is trimmed before parsing. The
+    /// string is invariant-culture whatever the caller's culture. See #52.
+    /// </remarks>
+    private static decimal ParseZ3Decimal(string value)
+    {
+        ReadOnlySpan<char> span = value.AsSpan();
+        if (value.EndsWith('?'))
+        {
+            span = span[..^1];
+        }
+
+        return decimal.Parse(span, NumberStyles.Number, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
