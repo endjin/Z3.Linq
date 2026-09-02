@@ -421,14 +421,24 @@ public class Theorem
     /// <returns>The type the symbol is declared and read as.</returns>
     private static Type SymbolType(MemberInfo member)
     {
-        Type type = member switch
+        Type type = MemberClrType(member);
+
+        return GetTypeMapping(type)?.RegularType ?? type;
+    }
+
+    /// <summary>
+    /// The declared CLR type of a property or field.
+    /// </summary>
+    /// <param name="member">The property or field.</param>
+    /// <returns>The member's <see cref="PropertyInfo.PropertyType"/> or <see cref="FieldInfo.FieldType"/>.</returns>
+    private static Type MemberClrType(MemberInfo member)
+    {
+        return member switch
         {
             PropertyInfo property => property.PropertyType,
             FieldInfo field => field.FieldType,
             _ => throw new NotSupportedException(),
         };
-
-        return GetTypeMapping(type)?.RegularType ?? type;
     }
 
     /// <summary>
@@ -629,12 +639,7 @@ public class Theorem
     {
         var toReturn = new Environment();
 
-        var parameterType = parameter switch
-        {
-            PropertyInfo parameterProperty => parameterProperty.PropertyType,
-            FieldInfo parameterField => parameterField.FieldType,
-            _ => throw new NotSupportedException(),
-        };
+        var parameterType = MemberClrType(parameter);
 
         parameterType = GetTypeMapping(parameterType)?.RegularType ?? parameterType;
 
@@ -680,12 +685,7 @@ public class Theorem
         // Normalize types when facing Z3. Theorem variable type mappings allow for strong
         // typing within the theorem, while underlying variable representations are Z3-
         // friendly types.
-        var parameterType = parameter switch
-        {
-            PropertyInfo parameterProperty => parameterProperty.PropertyType,
-            FieldInfo parameterField => parameterField.FieldType,
-            _ => throw new NotSupportedException(),
-        };
+        var parameterType = MemberClrType(parameter);
 
         TheoremVariableTypeMappingAttribute? parameterTypeMapping = GetTypeMapping(parameterType);
         parameterType = parameterTypeMapping?.RegularType ?? parameterType;
