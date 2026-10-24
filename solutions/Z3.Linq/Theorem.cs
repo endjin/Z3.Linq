@@ -425,8 +425,24 @@ public class Theorem
     /// <returns>The type the symbol is declared and read as.</returns>
     private static Type SymbolType(MemberInfo member)
     {
-        Type type = MemberClrType(member);
+        return MappedType(MemberClrType(member));
+    }
 
+    /// <summary>
+    /// The type a CLR type stands for in a theorem: itself, or the type a
+    /// <see cref="TheoremVariableTypeMappingAttribute"/> on it maps it to.
+    /// </summary>
+    /// <param name="type">A declared CLR type, of a member or of a converted constant.</param>
+    /// <returns>The type the symbol is declared and read as.</returns>
+    /// <remarks>
+    /// The environment builder, the bounds asserter, the marshaller and the expression visitor all
+    /// have to agree on this answer - a symbol, its bounds, the value read back and a constant
+    /// converted to it are the same type seen from four places. They asked the mapping separately
+    /// and the visitor did not ask at all, so a mapped type was a real symbol in the environment
+    /// and an untranslatable constant in the predicate. See #63, #76 and #91.
+    /// </remarks>
+    internal static Type MappedType(Type type)
+    {
         return GetTypeMapping(type)?.RegularType ?? type;
     }
 
@@ -643,9 +659,7 @@ public class Theorem
     {
         var toReturn = new Environment();
 
-        var parameterType = MemberClrType(parameter);
-
-        parameterType = GetTypeMapping(parameterType)?.RegularType ?? parameterType;
+        var parameterType = MappedType(MemberClrType(parameter));
 
         // Map the environment onto Z3-compatible types.
         Expr constrExp;
@@ -692,7 +706,7 @@ public class Theorem
         var parameterType = MemberClrType(parameter);
 
         TheoremVariableTypeMappingAttribute? parameterTypeMapping = GetTypeMapping(parameterType);
-        parameterType = parameterTypeMapping?.RegularType ?? parameterType;
+        parameterType = MappedType(parameterType);
 
         object value;
         TypeCode typeCode = Type.GetTypeCode(parameterType);

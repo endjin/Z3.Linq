@@ -186,9 +186,17 @@ internal sealed class ExpressionVisitor
         // This used to be a switch on the target type alone, which assumed the operand sort from
         // it - int-to-real for every conversion to double, real-to-int for every conversion to
         // int - and had no arm at all for long, float or decimal. See #63 and #76.
-        Sort? targetSort = expression.Type == typeof(char)
+        //
+        // The target is asked for the sort its symbols are declared with, so a type carrying a
+        // TheoremVariableTypeMappingAttribute is converted to the sort of the type it stands for,
+        // not to the sort of the type written in the cast. Reading the declared type instead made
+        // a cast to a mapped type look up a sort for TypeCode.Object, find none, and refuse the
+        // constant - while the very same type was a first-class symbol in the environment.
+        Type targetType = Theorem.MappedType(expression.Type);
+
+        Sort? targetSort = targetType == typeof(char)
             ? this.context.IntSort
-            : Theorem.TryGetSymbolSort(this.context, Type.GetTypeCode(expression.Type));
+            : Theorem.TryGetSymbolSort(this.context, Type.GetTypeCode(targetType));
 
         if (targetSort is not null)
         {
@@ -499,6 +507,18 @@ internal sealed class ExpressionVisitor
             TypeCode.DateTime => this.context.MkInt(ToUtcTicks((DateTime)val)),
 
             TypeCode.String => this.context.MkString((string)val),
+
+            // A constant of a type carrying a TheoremVariableTypeMappingAttribute arrives here as
+            // TypeCode.Object. The attribute promises a constructor from the regular type, not a
+            // conversion the other way, so an instance of the mapped type cannot be read back as
+            // a symbol - the cast at the use site is what carries the mapping, and VisitConvert
+            // translates that. Naming the mapped type is the remedy, where the bare message left
+            // the reader to guess why a type that solves as a symbol is refused as a constant.
+            _ when Theorem.MappedType(val.GetType()) != val.GetType()
+                => throw new NotSupportedException(
+                    $"Unsupported constant {val} of the mapped type {val.GetType().Name}, which stands for "
+                    + $"{Theorem.MappedType(val.GetType()).Name} in a theorem. Cast the constant to "
+                    + $"{val.GetType().Name} where it is used rather than passing an instance of it."),
 
             _ => throw new NotSupportedException($"Unsupported constant {val}"),
         };
