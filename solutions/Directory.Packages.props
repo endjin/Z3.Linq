@@ -12,7 +12,7 @@
          osx-arm64, win-x64 and win-arm64. It is downloaded into the local folder feed by
          scripts/Install-Z3Package.ps1, which pins the version and its SHA-256 hash -
          change both together with this one. -->
-    <PackageVersion Include="Microsoft.Z3" Version="5.1.0" />
+    <PackageVersion Include="Microsoft.Z3" Version="5.3.2" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">

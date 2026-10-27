@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Deliberately no PlatformTarget. Microsoft.Z3 5.1.0 ships native binaries for x64
+    <!-- Deliberately no PlatformTarget. Microsoft.Z3 5.3.2 ships native binaries for x64
          and arm64 on all three platforms, so AnyCPU lets each machine resolve the one it
          needs; pinning x64 here would shut arm64 out. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

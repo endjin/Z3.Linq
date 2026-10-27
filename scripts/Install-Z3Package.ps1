@@ -47,10 +47,10 @@
 [CmdletBinding()]
 param (
     [Parameter()]
-    [string] $Version = '5.1.0',
+    [string] $Version = '5.3.2',
 
     [Parameter()]
-    [string] $ExpectedHash = 'D808E6BD31D96895ECA446ECEB37E90DD24480B0D9B5F513113F3E2FD312ABF2',
+    [string] $ExpectedHash = '7DDF59F33CB6785C439186638450670AF450131B603CD07ABE116A75E4EC75F0',
 
     [Parameter()]
     [string] $FeedPath = (Join-Path $PSScriptRoot '..' '_z3-feed')
