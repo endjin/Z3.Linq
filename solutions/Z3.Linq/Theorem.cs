@@ -684,7 +684,7 @@ public class Theorem
         return toReturn;
     }
 
-    private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter, object? templateValue)
+    private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter, object? template)
     {
         // Normalize types when facing Z3. Theorem variable type mappings allow for strong
         // typing within the theorem, while underlying variable representations are Z3-
@@ -713,7 +713,7 @@ public class Theorem
                 // to put an initialiser and an anonymous instance is created uninitialised, so for
                 // those the template is the only source. With neither, say so by name rather than
                 // fail on the null. See #53 and #78.
-                if ((templateValue ?? GetMemberValue(parameter, destinationObject)) is not ICollection existing)
+                if ((GetMemberValue(parameter, template) ?? GetMemberValue(parameter, destinationObject)) is not ICollection existing)
                 {
                     throw new NotSupportedException(
                         $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
@@ -738,7 +738,7 @@ public class Theorem
             }
             else
             {
-                value = GetSolution(parameterType, context, model, subEnv, templateValue);
+                value = GetSolution(parameterType, context, model, subEnv, GetMemberValue(parameter, template));
             }
         }
         else
@@ -948,7 +948,7 @@ public class Theorem
                 //
                 // The instance here is uninitialised, so a collection on it has no length of its own;
                 // the one on the template - the instance passed to NewTheorem - supplies it. See #78.
-                field.SetValue(result, ConvertZ3Expression(result, context, model, subEnv, parameter, GetMemberValue(parameter, template)));
+                field.SetValue(result, ConvertZ3Expression(result, context, model, subEnv, parameter, template));
             }
 
             return result;
@@ -963,7 +963,7 @@ public class Theorem
                 var subEnv = environment.Properties[parameter];
 
                 // Evaluation of the values through the handle in the environment bindings.
-                object value = ConvertZ3Expression(result, context, model, subEnv, parameter, GetMemberValue(parameter, template));
+                object value = ConvertZ3Expression(result, context, model, subEnv, parameter, template);
 
                 switch (parameter)
                 {
