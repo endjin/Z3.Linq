@@ -53,8 +53,11 @@ public class ExpressionTranslationTests
     /// </summary>
     /// <remarks>
     /// The mirror of the test above: <c>X1</c> is pinned non-positive, so the conditional yields
-    /// its false branch, the constant 9, and the constraint <c>== 9</c> is satisfied without
-    /// pinning <c>X2</c> at all. Only <c>X1</c> is asserted; <c>X2</c> is free.
+    /// its false branch, the constant 9, and the constraint <c>== 9</c> holds. <c>X2</c> - the
+    /// true branch - is pinned to 0, so a translation that took the true branch regardless of the
+    /// test would ask for <c>0 == 9</c> and find no solution. Without that pin the solver could
+    /// satisfy a wrong translation by choosing <c>X2 == 9</c>, and the test would not tell the two
+    /// branches apart.
     /// </remarks>
     [TestMethod]
     public void Solve_TernaryWhoseTestFails_TakesTheFalseBranch()
@@ -66,11 +69,13 @@ public class ExpressionTranslationTests
         var result = context.NewTheorem<Symbols<int, int>>()
             .Where(t => (t.X1 > 0 ? t.X2 : 9) == 9)
             .Where(t => t.X1 == -1)
+            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
         result.ShouldNotBeNull();
         result.X1.ShouldBe(-1);
+        result.X2.ShouldBe(0);
     }
 
     [TestMethod]
