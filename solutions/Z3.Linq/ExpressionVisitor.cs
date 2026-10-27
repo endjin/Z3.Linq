@@ -217,7 +217,7 @@ internal sealed class ExpressionVisitor
 
             if (inner.IsReal && targetSort is IntSort)
             {
-                return this.context.MkReal2Int((RealExpr)inner);
+                return TruncateTowardZero((RealExpr)inner);
             }
 
             // Between the two bit-vector widths, uint and ulong. Both are unsigned, so widening
@@ -232,6 +232,27 @@ internal sealed class ExpressionVisitor
         }
 
         throw new NotImplementedException($"Cast '{expression.Operand} ({expression.Operand.Type})' to {expression.Type}");
+    }
+
+    /// <summary>
+    /// Converts a real to an integer by truncating toward zero, as a C# conversion from
+    /// <c>double</c>, <c>float</c> or <c>decimal</c> to an integer type does.
+    /// </summary>
+    /// <param name="value">The real-sorted operand.</param>
+    /// <returns>The integer part of <paramref name="value"/>.</returns>
+    /// <remarks>
+    /// Z3's real-to-integer conversion is a floor, which agrees with C# only for a non-negative
+    /// operand: the floor of -2.5 is -3, but <c>(int)-2.5</c> is -2. A negative operand is
+    /// negated, floored and negated back, which is its ceiling.
+    /// </remarks>
+    private Expr TruncateTowardZero(RealExpr value)
+    {
+        RealExpr zero = this.context.MkReal(0);
+
+        return this.context.MkITE(
+            this.context.MkGe(value, zero),
+            this.context.MkReal2Int(value),
+            this.context.MkUnaryMinus(this.context.MkReal2Int((RealExpr)this.context.MkUnaryMinus(value))));
     }
 
     /// <summary>

@@ -353,6 +353,63 @@ public class NumericConversionTests
     }
 
     /// <summary>
+    /// A cast from <c>double</c> to <c>int</c> truncates toward zero, as C# does.
+    /// </summary>
+    /// <remarks>
+    /// Z3's real-to-integer conversion is a floor, which agrees with C# only for a non-negative
+    /// operand or a whole number: the floor of -2.5 is -3, but <c>(int)-2.5</c> is -2. The expected
+    /// value is computed with C# from the returned symbol.
+    /// </remarks>
+    [TestMethod]
+    [DataRow(2.5, DisplayName = "2.5")]
+    [DataRow(-2.5, DisplayName = "-2.5")]
+    [DataRow(-2.0, DisplayName = "-2.0")]
+    [DataRow(-0.5, DisplayName = "-0.5")]
+    [DataRow(0.0, DisplayName = "0.0")]
+    public void Solve_DoubleSymbolCastToInt_TruncatesTowardZero(double value)
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<double, int>>()
+            .Where(t => t.X1 == value)
+            .Where(t => t.X2 == (int)t.X1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe((int)result.X1);
+    }
+
+    /// <summary>
+    /// A cast from <c>decimal</c> to <c>long</c> truncates toward zero too.
+    /// </summary>
+    /// <remarks>
+    /// Decimal's explicit conversion is an operator method on <c>decimal</c>, which takes the same
+    /// real-to-integer path, so it needs the same treatment.
+    /// </remarks>
+    [TestMethod]
+    [DataRow(7.75, DisplayName = "7.75")]
+    [DataRow(-7.75, DisplayName = "-7.75")]
+    public void Solve_DecimalSymbolCastToLong_TruncatesTowardZero(double value)
+    {
+        // Arrange: DataRow cannot carry a decimal, so the value travels as a double.
+        using var context = new Z3Context();
+        decimal amount = (decimal)value;
+
+        // Act
+        var result = context.NewTheorem<Symbols<decimal, long>>()
+            .Where(t => t.X1 == amount)
+            .Where(t => t.X2 == (long)t.X1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe((long)result.X1);
+    }
+
+    /// <summary>
     /// A user-defined conversion operator is refused rather than treated as a no-op.
     /// </summary>
     /// <remarks>
