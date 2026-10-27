@@ -892,7 +892,7 @@ public class Theorem
     /// <param name="context">Z3 context.</param>
     /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
     /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
-    /// <param name="template">An instance of <typeparamref name="T"/> whose collections give the solution's their length, or null.</param>
+    /// <param name="template">An instance of <typeparamref name="T"/> whose collections set the lengths of the solution's collections, or null.</param>
     /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
     private static T GetSolution<T>(Context context, Model model, Environment environment, object? template)
     {
@@ -907,7 +907,7 @@ public class Theorem
     /// <param name="context">Z3 context.</param>
     /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
     /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
-    /// <param name="template">An instance of <paramref name="t"/> whose collections give the solution's their length, or null.</param>
+    /// <param name="template">An instance of <paramref name="t"/> whose collections set the lengths of the solution's collections, or null.</param>
     /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
     private static object GetSolution(Type t, Context context, Model model, Environment environment, object? template)
     {
