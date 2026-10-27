@@ -4,7 +4,6 @@ using Microsoft.Z3;
 
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -453,13 +452,23 @@ public class Theorem
     /// solves.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The environment builder, the bounds asserter and the marshaller each ask this of the same
     /// member types on every solve, and the answer is fixed for the life of the type. Caching it
     /// turns the common no-mapping case - the great majority of members - from a reflection call
-    /// and an array allocation per member per solve into a dictionary lookup. A type with no
-    /// mapping caches a null, so absence is cached as cheaply as presence.
+    /// and an array allocation per member per solve into a table lookup. A type with no mapping
+    /// caches an entry holding null, so absence is cached as cheaply as presence.
+    /// </para>
+    /// <para>
+    /// This cache and the member caches below are <see cref="ConditionalWeakTable{TKey, TValue}"/>s
+    /// rather than dictionaries, because they live as long as the library does. A dictionary would
+    /// hold every type it had seen, so a type from a collectible assembly - a plugin the host
+    /// reloads, a script it compiles - would keep that assembly loaded for good. A weak table drops
+    /// its entry when nothing else holds the type, and an entry's value referring back to its key,
+    /// as a <see cref="PropertyInfo"/> does through its declaring type, does not keep the key alive.
+    /// </para>
     /// </remarks>
-    private static readonly ConcurrentDictionary<Type, TheoremVariableTypeMappingAttribute?> TypeMappings = new();
+    private static readonly ConditionalWeakTable<Type, TypeMappingEntry> TypeMappings = new();
 
     /// <summary>
     /// The <see cref="TheoremVariableTypeMappingAttribute"/> declared on <paramref name="type"/>,
@@ -469,10 +478,17 @@ public class Theorem
     /// <returns>The mapping attribute, or <see langword="null"/>.</returns>
     private static TheoremVariableTypeMappingAttribute? GetTypeMapping(Type type)
     {
-        return TypeMappings.GetOrAdd(
+        return TypeMappings.GetValue(
             type,
-            static t => t.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault());
+            static t => new TypeMappingEntry(t.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault())).Mapping;
     }
+
+    /// <summary>
+    /// A cached type mapping, or its absence: a <see cref="ConditionalWeakTable{TKey, TValue}"/>
+    /// value cannot be null, so a type with no mapping needs an entry to say so.
+    /// </summary>
+    /// <param name="Mapping">The type's mapping attribute, or <see langword="null"/>.</param>
+    private sealed record TypeMappingEntry(TheoremVariableTypeMappingAttribute? Mapping);
 
     /// <summary>
     /// The public instance properties of a type, cached across solves.
@@ -481,25 +497,26 @@ public class Theorem
     /// <see cref="Type.GetProperties(BindingFlags)"/> hands back a fresh array on every call, so
     /// the environment builder allocated one per type on every solve to walk the same fixed set of
     /// members. The cached array is only ever read, never mutated, so sharing one instance is safe.
+    /// Weak for the same reason as <see cref="TypeMappings"/>.
     /// </remarks>
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PublicInstanceProperties = new();
+    private static readonly ConditionalWeakTable<Type, PropertyInfo[]> PublicInstanceProperties = new();
 
     /// <summary>
-    /// The public instance fields of a type, cached across solves, for the same reason as
+    /// The public instance fields of a type, cached across solves, for the same reasons as
     /// <see cref="PublicInstanceProperties"/>.
     /// </summary>
-    private static readonly ConcurrentDictionary<Type, FieldInfo[]> PublicInstanceFields = new();
+    private static readonly ConditionalWeakTable<Type, FieldInfo[]> PublicInstanceFields = new();
 
     /// <summary>Gets the cached public instance properties of <paramref name="type"/>.</summary>
     private static PropertyInfo[] GetPublicInstanceProperties(Type type)
     {
-        return PublicInstanceProperties.GetOrAdd(type, static t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance));
+        return PublicInstanceProperties.GetValue(type, static t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance));
     }
 
     /// <summary>Gets the cached public instance fields of <paramref name="type"/>.</summary>
     private static FieldInfo[] GetPublicInstanceFields(Type type)
     {
-        return PublicInstanceFields.GetOrAdd(type, static t => t.GetFields(BindingFlags.Public | BindingFlags.Instance));
+        return PublicInstanceFields.GetValue(type, static t => t.GetFields(BindingFlags.Public | BindingFlags.Instance));
     }
 
     /// <summary>
