@@ -206,6 +206,16 @@ internal sealed class ExpressionVisitor
             {
                 return this.context.MkReal2Int((RealExpr)inner);
             }
+
+            // Between the two bit-vector widths, uint and ulong. Both are unsigned, so widening
+            // zero-extends, and an explicit narrowing cast keeps the low bits, as an unchecked C#
+            // cast does.
+            if (inner is BitVecExpr bvInner && targetSort is BitVecSort bvTarget)
+            {
+                return bvTarget.Size > bvInner.SortSize
+                    ? this.context.MkZeroExt(bvTarget.Size - bvInner.SortSize, bvInner)
+                    : this.context.MkExtract(bvTarget.Size - 1, 0, bvInner);
+            }
         }
 
         throw new NotImplementedException($"Cast '{expression.Operand} ({expression.Operand.Type})' to {expression.Type}");
@@ -235,15 +245,30 @@ internal sealed class ExpressionVisitor
     /// <c>long</c> or real symbol carries mathematical arithmetic. Both operands share a sort,
     /// since C# would not compile a mixed expression without a conversion, which
     /// <see cref="VisitConvert"/> handles first.
+    /// <para>
+    /// A <c>checked</c> operator on bit-vectors is refused. The bit-vector form wraps, so a
+    /// translation would return a wrapped model for a predicate that C# evaluates by throwing
+    /// <see cref="OverflowException"/>, which is a solution the caller could not have got by
+    /// running the predicate.
+    /// </para>
     /// </remarks>
     private Expr VisitArithmetic(BinaryExpression expression, Func<Context, ArithExpr, ArithExpr, ArithExpr> arith, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bv)
     {
         Expr left = Visit(expression.Left);
         Expr right = Visit(expression.Right);
 
-        return left is BitVecExpr bvLeft
-            ? bv(this.context, bvLeft, (BitVecExpr)right)
-            : arith(this.context, (ArithExpr)left, (ArithExpr)right);
+        if (left is not BitVecExpr bvLeft)
+        {
+            return arith(this.context, (ArithExpr)left, (ArithExpr)right);
+        }
+
+        if (expression.NodeType is ExpressionType.AddChecked or ExpressionType.SubtractChecked or ExpressionType.MultiplyChecked)
+        {
+            throw new NotSupportedException(
+                $"A checked '{expression.NodeType}' on bit-vector (uint/ulong) symbols is not supported: bit-vector arithmetic wraps, and overflow checking is not translated. Remove the checked context to solve with wrapping arithmetic.");
+        }
+
+        return bv(this.context, bvLeft, (BitVecExpr)right);
     }
 
     /// <summary>
@@ -310,6 +335,13 @@ internal sealed class ExpressionVisitor
     /// C# types the shift amount as <c>int</c>, so the right operand translates to an integer and
     /// is converted to a bit-vector of the value's width before the shift. Only a bit-vector value
     /// can be shifted; Z3's integer sort has no shift.
+    /// <para>
+    /// C# uses only the low bits of the count: five for a <c>uint</c>, six for a <c>ulong</c>, so
+    /// <c>x &lt;&lt; 32</c> on a <c>uint</c> is <c>x</c>, and a negative count shifts by its low
+    /// bits too. Z3 shifts by the whole count, and anything at or beyond the width gives 0, so the
+    /// count is masked with the width minus one before the shift. The conversion to a bit-vector
+    /// is modulo 2^width, so a negative count reaches the mask in two's complement, as it does in C#.
+    /// </para>
     /// </remarks>
     private Expr VisitShift(BinaryExpression expression, string op, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bvOp)
     {
@@ -322,8 +354,9 @@ internal sealed class ExpressionVisitor
         }
 
         BitVecExpr bvAmount = amount as BitVecExpr ?? this.context.MkInt2BV(bvValue.SortSize, (IntExpr)amount);
+        BitVecExpr maskedAmount = this.context.MkBVAND(bvAmount, this.context.MkBV(bvValue.SortSize - 1, bvValue.SortSize));
 
-        return bvOp(this.context, bvValue, bvAmount);
+        return bvOp(this.context, bvValue, maskedAmount);
     }
 
     /// <summary>
