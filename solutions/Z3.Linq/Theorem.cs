@@ -401,8 +401,11 @@ public class Theorem
     /// <remarks>
     /// A <see cref="DateTime"/> is its ticks (#83), so its range is
     /// <see cref="DateTime.MinValue"/> to <see cref="DateTime.MaxValue"/> in ticks.
+    /// <para>
+    /// <see cref="ExpressionVisitor"/> uses the same ranges to wrap a narrowing integer conversion.
+    /// </para>
     /// </remarks>
-    private static (long Low, long High)? GetBounds(TypeCode typeCode)
+    internal static (long Low, long High)? GetBounds(TypeCode typeCode)
     {
         return typeCode switch
         {

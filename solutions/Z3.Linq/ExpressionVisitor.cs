@@ -178,10 +178,11 @@ internal sealed class ExpressionVisitor
         // A numeric conversion the compiler inserted, or the caller wrote, means one of three
         // things in Z3, and which one depends on the sorts involved rather than on the CLR
         // types: nothing at all when both types map to the same sort (short to int, int to
-        // long, float to double, a cast that only narrows); integer-to-real when the operand is
-        // an integer and the target a real (int to double, int to decimal); real-to-integer the
-        // other way round. The target sort comes from the same mapping the symbols are declared
-        // with, so a conversion can never disagree with a symbol about what a type is.
+        // long, float to double), except that a cast narrowing one integer type to another
+        // wraps; integer-to-real when the operand is an integer and the target a real (int to
+        // double, int to decimal); real-to-integer the other way round. The target sort comes
+        // from the same mapping the symbols are declared with, so a conversion can never
+        // disagree with a symbol about what a type is.
         //
         // This used to be a switch on the target type alone, which assumed the operand sort from
         // it - int-to-real for every conversion to double, real-to-int for every conversion to
@@ -192,9 +193,21 @@ internal sealed class ExpressionVisitor
 
         if (targetSort is not null)
         {
+            // A conversion that calls an operator method runs C# the visitor cannot see into, so
+            // translating it from the sorts alone would drop whatever the operator does. Decimal's
+            // built-in conversions are operator methods on decimal too, and are the numeric
+            // conversions translated here; any other operator is refused.
+            if (expression.Method is { } method && method.DeclaringType != typeof(decimal))
+            {
+                throw new NotSupportedException(
+                    $"The conversion '{expression}' calls the user-defined operator {method.DeclaringType}.{method.Name}, which cannot be translated: only built-in numeric conversions are supported.");
+            }
+
             if (inner.Sort.Equals(targetSort))
             {
-                return inner;
+                return inner is IntExpr intInner
+                    ? WrapIntoRange(intInner, expression.Operand.Type, expression.Type)
+                    : inner;
             }
 
             if (inner.IsInt && targetSort is RealSort)
@@ -219,6 +232,63 @@ internal sealed class ExpressionVisitor
         }
 
         throw new NotImplementedException($"Cast '{expression.Operand} ({expression.Operand.Type})' to {expression.Type}");
+    }
+
+    /// <summary>
+    /// Wraps an integer-sorted value into the range of the conversion's target type, as an
+    /// unchecked C# conversion between integer types does.
+    /// </summary>
+    /// <param name="value">The translated operand.</param>
+    /// <param name="from">The operand's CLR type.</param>
+    /// <param name="to">The conversion's target CLR type.</param>
+    /// <returns><paramref name="value"/> unchanged for a widening conversion; otherwise the value
+    /// wrapped into the target's range.</returns>
+    /// <remarks>
+    /// Every integer CLR type except <c>uint</c> and <c>ulong</c> is an unbounded integer in Z3,
+    /// so a narrowing cast such as <c>(int)</c> of a <c>long</c> changes nothing about the sort,
+    /// but C# keeps only the low bits: <c>(int)4294967295L</c> is -1. With a target range of
+    /// size <c>n</c> starting at <c>low</c>, the wrapped value is
+    /// <c>((value - low) mod n) + low</c>. Z3's <c>mod</c> by a positive constant is never
+    /// negative, so this covers signed and unsigned targets and negative operands alike. A
+    /// <c>checked</c> conversion is a different node type, which is not translated.
+    /// </remarks>
+    private Expr WrapIntoRange(IntExpr value, Type from, Type to)
+    {
+        // A long target holds every integer source, and its range has no size that fits in a long.
+        if (IntegerRange(to) is not (long low, long high) || (low == long.MinValue && high == long.MaxValue))
+        {
+            return value;
+        }
+
+        if (IntegerRange(from) is (long fromLow, long fromHigh) && fromLow >= low && fromHigh <= high)
+        {
+            return value;
+        }
+
+        IntExpr size = this.context.MkInt(high - low + 1);
+
+        if (low == 0)
+        {
+            return this.context.MkMod(value, size);
+        }
+
+        IntExpr lowExpr = this.context.MkInt(low);
+        IntExpr shifted = (IntExpr)this.context.MkSub(value, lowExpr);
+
+        return this.context.MkAdd(this.context.MkMod(shifted, size), lowExpr);
+    }
+
+    /// <summary>
+    /// The range of an integer CLR type that travels through Z3 as an integer, or
+    /// <see langword="null"/> for any other type.
+    /// </summary>
+    /// <param name="type">The CLR type; an enum gives its underlying type's range.</param>
+    /// <returns>The inclusive range, or <see langword="null"/>.</returns>
+    private static (long Low, long High)? IntegerRange(Type type)
+    {
+        return type == typeof(char)
+            ? (char.MinValue, char.MaxValue)
+            : Type.GetTypeCode(type) is TypeCode.DateTime ? null : Theorem.GetBounds(Type.GetTypeCode(type));
     }
 
     /// <summary>

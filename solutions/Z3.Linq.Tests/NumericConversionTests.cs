@@ -242,4 +242,150 @@ public class NumericConversionTests
         result.ShouldNotBeNull();
         result.X1.ShouldBe(2.5f);
     }
+
+    /// <summary>
+    /// A narrowing cast from <c>long</c> to <c>int</c> wraps, as an unchecked C# cast does.
+    /// </summary>
+    /// <remarks>
+    /// Both types are integer-sorted in Z3, so a translation that compares sorts alone treats the
+    /// cast as a no-op, and <c>(int)4294967295L</c> comes out as 4294967295 where C# gives -1. The
+    /// expected value is computed with C# from the returned symbol.
+    /// </remarks>
+    [TestMethod]
+    [DataRow(5L, DisplayName = "In range")]
+    [DataRow(4294967295L, DisplayName = "UInt32.MaxValue")]
+    [DataRow(2147483648L, DisplayName = "Int32.MaxValue + 1")]
+    [DataRow(-2147483649L, DisplayName = "Int32.MinValue - 1")]
+    [DataRow(long.MinValue, DisplayName = "Int64.MinValue")]
+    public void Solve_LongSymbolCastToInt_WrapsAsCSharpDoes(long value)
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<long, int>>()
+            .Where(t => t.X1 == value)
+            .Where(t => t.X2 == (int)t.X1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(unchecked((int)result.X1));
+    }
+
+    /// <summary>
+    /// A narrowing cast to a signed or unsigned small integer wraps too.
+    /// </summary>
+    /// <remarks>
+    /// <c>short</c> and <c>sbyte</c> wrap into a range centred on zero, <c>byte</c>,
+    /// <c>ushort</c> and <c>char</c> into one starting at zero, so both shapes of the wrap are
+    /// exercised, including negative operands into an unsigned type.
+    /// </remarks>
+    [TestMethod]
+    [DataRow(40000, DisplayName = "40000")]
+    [DataRow(-40000, DisplayName = "-40000")]
+    [DataRow(300, DisplayName = "300")]
+    [DataRow(-1, DisplayName = "-1")]
+    [DataRow(int.MaxValue, DisplayName = "Int32.MaxValue")]
+    public void Solve_IntSymbolCastToSmallIntegers_WrapsAsCSharpDoes(int value)
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<int, short, byte, sbyte, ushort>>()
+            .Where(t => t.X1 == value)
+            .Where(t => t.X2 == (short)t.X1)
+            .Where(t => t.X3 == (byte)t.X1)
+            .Where(t => t.X4 == (sbyte)t.X1)
+            .Where(t => t.X5 == (ushort)t.X1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(unchecked((short)result.X1));
+        result.X3.ShouldBe(unchecked((byte)result.X1));
+        result.X4.ShouldBe(unchecked((sbyte)result.X1));
+        result.X5.ShouldBe(unchecked((ushort)result.X1));
+    }
+
+    /// <summary>
+    /// A cast to <c>char</c> wraps into the <c>char</c> range.
+    /// </summary>
+    [TestMethod]
+    [DataRow(65, DisplayName = "In range")]
+    [DataRow(65601, DisplayName = "65536 + 65")]
+    [DataRow(-1, DisplayName = "-1")]
+    public void Solve_IntSymbolCastToChar_WrapsAsCSharpDoes(int value)
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<int, int>>()
+            .Where(t => t.X1 == value)
+            .Where(t => t.X2 == (char)t.X1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe((int)unchecked((char)result.X1));
+    }
+
+    /// <summary>
+    /// A widening cast adds no wrap: the solver can still reach the whole range of the source.
+    /// </summary>
+    [TestMethod]
+    public void Solve_IntSymbolWidenedToLong_KeepsTheValue()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<int, long>>()
+            .Where(t => t.X1 == int.MinValue)
+            .Where(t => t.X2 == (long)t.X1 - 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe((long)int.MinValue - 1);
+    }
+
+    /// <summary>
+    /// A user-defined conversion operator is refused rather than treated as a no-op.
+    /// </summary>
+    /// <remarks>
+    /// <c>Doubled</c> is mapped to <c>float</c>, so its symbol is real-sorted, and its explicit
+    /// conversion to <c>float</c> is real-sorted too. A translation that compares the sorts alone
+    /// drops the operator, and the model for <c>(float)t.X1 == 6f</c> would hold 6 where the
+    /// operator gives 12. The operator's body is C# the visitor cannot see into, so it says so.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_UserDefinedConversionOperator_IsRefused()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        var theorem = context.NewTheorem<DoubledEnvironment>()
+            .Where(t => (float)t.X1 == 6f);
+
+        // Act & Assert
+        Should.Throw<NotSupportedException>(() => theorem.Solve()).Message.ShouldContain("op_Explicit");
+    }
+
+    [TheoremVariableTypeMapping(typeof(float))]
+    private readonly struct Doubled
+    {
+        public Doubled(float value) => this.Value = value;
+
+        public float Value { get; }
+
+        public static explicit operator float(Doubled doubled) => doubled.Value * 2;
+    }
+
+    private sealed class DoubledEnvironment
+    {
+        public Doubled X1 { get; set; }
+    }
 }
