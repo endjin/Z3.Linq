@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <PackageDescription>Sample Theorems for Sudoku and River Crossing problems.</PackageDescription>
-    <PackageTags>Z3; LINQ; Solver; SMT; Examples; Sudoku; Bart De Smet</PackageTags>
+    <PackageDescription>Sample theorems: Sudoku and its Killer and Greater-Than variants, River Crossing, logic puzzles, graph colouring, scheduling, dependency resolution and bit-twiddling proofs based on problems in SAT/SMT by Example.</PackageDescription>
+    <PackageTags>Z3; LINQ; Solver; SMT; Examples; Sudoku; Puzzles; Scheduling; BitVector; Bart De Smet</PackageTags>
     <!-- Sample code: its types are illustrations rather than an API, so a public member without
          a doc comment is not an error here. The comments it does carry are still validated, and
          the package ships what there is. See #82. -->
