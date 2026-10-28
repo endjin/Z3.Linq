@@ -6,19 +6,26 @@ namespace Z3.Linq.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A collection symbol is declared as a Z3 array with a domain (index) sort and a range
-/// (element) sort chosen per element type (Theorem.cs:205-235). Elements are always read with
-/// an integer index (Theorem.cs:448), and the number read is the <c>Count</c> of the collection
-/// already on the instance - so an environment must pre-size its collections, and a solution
-/// never changes their length.
+/// A collection symbol is declared as a Z3 array from <c>Int</c> to the element type's sort -
+/// the same sort a scalar of that type gets, from the one mapping the two share. Elements are
+/// always read back with an integer index, and the number read is the <c>Count</c> of the
+/// collection already on the instance - so an environment must pre-size its collections, and a
+/// solution never changes their length.
 /// </para>
 /// <para>
-/// Only <c>int</c> elements work. Every other element type declares a domain or range that
-/// contradicts how the elements are constrained or read; those cases are pinned below against
-/// #64. Where they fail depends on the constraint - one naming a constant of the element type
-/// fails during translation, while elements left free solve cleanly and fail in the marshalling
-/// loop instead. The Sudoku examples are all <c>int</c>, which is why the limitation has gone
-/// unnoticed.
+/// Every element type a scalar supports now round-trips through a collection too. Until #64
+/// only <c>int</c> did: collections carried a sort mapping of their own, and every row but the
+/// <c>int</c> one declared a domain or range that contradicted how the elements were constrained
+/// or read. Where a case failed depended on the constraint - one naming a constant of the
+/// element type failed during translation, while elements left free solved cleanly and failed
+/// in the marshalling loop instead - which is why the tests below cover both shapes. The Sudoku
+/// examples are all <c>int</c>, which is why the limitation went unnoticed.
+/// </para>
+/// <para>
+/// None of this reaches a collection whose elements are objects. The library builds one array
+/// per property of the element type for those, but neither the visitor nor the marshaller can
+/// use what it built, so a <c>Holder[]</c> symbol fails in every shape - #89. Nothing here
+/// covers that path.
 /// </para>
 /// <para>
 /// A collection symbol can be a property or a public field, and since #53 the two behave
@@ -130,146 +137,451 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#64): no collection element type other than <c>int</c> can be translated.
-    /// </summary>
-    /// <remarks>
-    /// Each case declares a domain or range sort that contradicts either the constrained values
-    /// or the integer index used to read elements back, so Z3 rejects the term outright. The
-    /// message differs per type, so the assertion is on the exception rather than its text.
-    /// These pin current behaviour and must be updated when the defect is fixed.
-    /// </remarks>
-    [TestMethod]
-    public void Solve_LongArraySymbol_ThrowsZ3Exception()
-    {
-        // Arrange: range is BitVec 64 while the constrained value is an integer term.
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<LongArrayEnvironment>()
-            .Where(t => t.Values[0] == 1L)
-            .Where(t => t.Length == 2);
-
-        // Act & Assert
-        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
-    }
-
-    /// <summary>KNOWN DEFECT (#64). See <see cref="Solve_LongArraySymbol_ThrowsZ3Exception"/>.</summary>
-    [TestMethod]
-    public void Solve_BoolArraySymbol_ThrowsZ3Exception()
-    {
-        // Arrange: the domain - the index sort - is declared Bool, but elements are read with an
-        // integer index.
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<BoolArrayEnvironment>()
-            .Where(t => t.Values[0])
-            .Where(t => t.Length == 2);
-
-        // Act & Assert
-        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
-    }
-
-    /// <summary>KNOWN DEFECT (#64). See <see cref="Solve_LongArraySymbol_ThrowsZ3Exception"/>.</summary>
-    [TestMethod]
-    public void Solve_DoubleArraySymbol_ThrowsZ3Exception()
-    {
-        // Arrange: range is a floating-point sort while the constrained value is a real.
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<DoubleArrayEnvironment>()
-            .Where(t => t.Values[0] == 1.5)
-            .Where(t => t.Length == 2);
-
-        // Act & Assert
-        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
-    }
-
-    /// <summary>
-    /// KNOWN DEFECT (#64), and the reason the array half of #54 cannot be observed.
-    /// </summary>
-    /// <remarks>
-    /// The element loop has its own <c>TypeCode.Single</c> arm with the same defect #54 fixed on
-    /// the scalar path, and it was corrected in the same commit. Nothing reaches the parse it
-    /// contains. The shape below fails during translation, because a float array declares a
-    /// floating-point range against a real-valued constraint, exactly as a double array does;
-    /// leaving the elements free instead gets past translation but no further than the cast on
-    /// the line before the parse, as
-    /// <see cref="Solve_DecimalArrayWithFreeElements_CastsTheElementNotTheArray"/> shows for the
-    /// neighbouring arm.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
-    /// </remarks>
-    [TestMethod]
-    public void Solve_FloatArraySymbol_ThrowsZ3Exception()
-    {
-        // Arrange
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<FloatArrayEnvironment>()
-            .Where(t => t.Values[0] == 1.5f)
-            .Where(t => t.Length == 2);
-
-        // Act & Assert
-        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
-    }
-
-    /// <summary>
-    /// KNOWN DEFECT (#64): a decimal array constrained against a decimal constant does not survive
-    /// translation.
-    /// </summary>
-    /// <remarks>
-    /// This is the shape #64 lists, and the reason it concluded the element loop was unreachable
-    /// for a decimal. It is not the only shape: leaving the elements free reaches the loop, which
-    /// is where the three tests below observe the #55 fix.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
-    /// </remarks>
-    [TestMethod]
-    public void Solve_DecimalArraySymbol_ThrowsZ3Exception()
-    {
-        // Arrange
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<DecimalArrayEnvironment>()
-            .Where(t => t.Values[0] == 1.5m)
-            .Where(t => t.Length == 2);
-
-        // Act & Assert
-        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
-    }
-
-    /// <summary>
-    /// The defect in #55: the decimal arm of the element loop evaluated the whole array constant
-    /// instead of the element the loop had just selected.
+    /// A <c>long</c> collection round-trips values no <c>int</c> could hold.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Every other arm of that loop reads <c>numValExpr</c>, the result of
-    /// <c>MkSelect(arrVal, MkInt(i))</c>. The decimal arm called <c>Eval</c> a second time on
-    /// <c>subEnv.Expr</c> - the array itself - and cast the result to
-    /// <see cref="Microsoft.Z3.RatNum"/>, which an array expression can never satisfy. The issue
-    /// describes the symptom as every element taking the same value or the cast failing; measured,
-    /// it is always the cast, in every shape a decimal collection can take.
+    /// The first of the element types #64 fixed. Its range was declared as a 64-bit bit-vector
+    /// while a constrained value translated to an integer term, so Z3 rejected the comparison
+    /// outright - <c>Sorts (_ BitVec 64) and Int are incompatible</c>. The range is now the same
+    /// <c>Int</c> a scalar <c>long</c> has always used.
     /// </para>
     /// <para>
-    /// A decimal collection still cannot be solved, because #64 declares its range as a
-    /// floating-point sort, so the assertion here is about which expression the cast rejects
-    /// rather than about a value. The load-bearing half is that the message no longer names an
-    /// array: that is #55, and reverting the fix fails on it. The element type it does name is
-    /// #64's sort mapping, and that half must be updated when #64 is fixed.
-    /// </para>
-    /// <para>
-    /// #64 records this code as unreachable. That holds only for a constraint naming a decimal
-    /// constant, which fails during translation; with the elements left free the theorem solves
-    /// and the element loop runs.
+    /// The values are beyond <c>Int32</c> range on purpose: a round-trip that silently narrowed
+    /// the element read would only pass by accident.
     /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_DecimalArrayWithFreeElements_CastsTheElementNotTheArray()
+    public void Solve_LongArraySymbol_RoundTripsEveryElement()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<DecimalArrayEnvironment>()
-            .Where(t => t.Length == 2);
 
         // Act
-        InvalidCastException exception = Should.Throw<InvalidCastException>(() => theorem.Solve());
+        var result = context.NewTheorem<LongArrayEnvironment>()
+            .Where(t => t.Values[0] == 9_000_000_000L)
+            .Where(t => t.Values[1] == -9_000_000_000L)
+            .Where(t => t.Length == 2)
+            .Solve();
 
         // Assert
-        exception.Message.ShouldNotContain("ArrayExpr");
-        exception.Message.ShouldContain("FPNum");
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([9_000_000_000L, -9_000_000_000L]);
+    }
+
+    [TestMethod]
+    public void Solve_LongListSymbol_RoundTripsEveryElement()
+    {
+        // Arrange: the generic-collection branch, reconstructed through the constructor rather
+        // than ToArray.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<LongListEnvironment>()
+            .Where(t => t.Values[0] == 9_000_000_000L)
+            .Where(t => t.Values[1] == 1L)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([9_000_000_000L, 1L]);
+    }
+
+    /// <summary>
+    /// A <c>bool</c> collection round-trips each element.
+    /// </summary>
+    /// <remarks>
+    /// The case where the <em>domain</em> was wrong rather than the range: a <c>bool</c>
+    /// collection was declared as an array indexed <em>by</em> <c>Bool</c>, and every element is
+    /// read with an integer index - <c>domain sort Int and parameter Bool do not match</c>. It
+    /// failed the same way whether or not the constraint named a constant, because the index is
+    /// supplied by the library rather than by the constraint. The domain is now <c>Int</c> for
+    /// every element type.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_BoolArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<BoolArrayEnvironment>()
+            .Where(t => t.Values[0])
+            .Where(t => !t.Values[1])
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([true, false]);
+    }
+
+    [TestMethod]
+    public void Solve_BoolListSymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<BoolListEnvironment>()
+            .Where(t => !t.Values[0])
+            .Where(t => t.Values[1])
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([false, true]);
+    }
+
+    /// <summary>
+    /// A <c>double</c> collection round-trips each element.
+    /// </summary>
+    /// <remarks>
+    /// The range was a floating-point sort while a constrained value translated to a real -
+    /// <c>Sorts (_ FloatingPoint 11 53) and Real are incompatible</c>. A scalar <c>double</c> has
+    /// always been a <c>Real</c>, and its collection now is too. The values are chosen to be
+    /// exactly representable, so the assertion is about the sort and not about rounding.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DoubleArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DoubleArrayEnvironment>()
+            .Where(t => t.Values[0] == 1.5)
+            .Where(t => t.Values[1] == -2.25)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([1.5, -2.25]);
+    }
+
+    [TestMethod]
+    public void Solve_DoubleArrayWithRelationalConstraints_SatisfiesThemAll()
+    {
+        // Arrange: elements related to each other rather than pinned, over a real-sorted
+        // collection - the shape the int tests above use, now available to every element type.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DoubleArrayEnvironment>()
+            .Where(t => t.Values[0] > 2.5)
+            .Where(t => t.Values[1] == t.Values[0] * 2)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values[0].ShouldBeGreaterThan(2.5);
+        result.Values[1].ShouldBe(result.Values[0] * 2);
+    }
+
+    /// <summary>
+    /// A <c>float</c> collection round-trips each element - the array half of #54, observable for
+    /// the first time.
+    /// </summary>
+    /// <remarks>
+    /// The element loop has had its own <c>TypeCode.Single</c> arm, corrected alongside the
+    /// scalar one when #54 was fixed, and until #64 nothing could reach it: a constrained
+    /// <c>float</c> collection failed during translation exactly as a <c>double</c> one did, and
+    /// a free one got no further than the cast on the line before the parse. This is the first
+    /// test that exercises that arm, and <c>0.1f</c> is here because it is not exactly
+    /// representable - the parse has to produce the same <c>float</c> the constraint named.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_FloatArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<FloatArrayEnvironment>()
+            .Where(t => t.Values[0] == 1.5f)
+            .Where(t => t.Values[1] == 0.1f)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([1.5f, 0.1f]);
+    }
+
+    /// <summary>
+    /// A <c>decimal</c> collection round-trips each element.
+    /// </summary>
+    /// <remarks>
+    /// This is the shape #64 listed for <c>decimal</c> - a constraint naming a decimal constant -
+    /// and the reason it concluded the element loop was unreachable. The range it declared was a
+    /// 32-bit floating-point sort, which would not have held a <c>decimal</c> even if the sorts
+    /// had agreed; see <see cref="Solve_DecimalArraySymbol_RoundTripsAtFullPrecision"/> for the
+    /// case that proves the range is now a <c>Real</c>.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DecimalArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DecimalArrayEnvironment>()
+            .Where(t => t.Values[0] == 1.5m)
+            .Where(t => t.Values[1] == 0.1m)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([1.5m, 0.1m]);
+    }
+
+    /// <summary>
+    /// A <c>decimal</c> element survives at full precision.
+    /// </summary>
+    /// <remarks>
+    /// <c>decimal.MaxValue</c> has 29 significant digits. No floating-point sort Z3 offers could
+    /// return it exactly, so this passing is direct evidence that the element range is the same
+    /// unbounded <c>Real</c> a scalar <c>decimal</c> uses, rather than a wider float that would
+    /// pass the test above and lose precision quietly on larger values.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DecimalArraySymbol_RoundTripsAtFullPrecision()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DecimalArrayEnvironment>()
+            .Where(t => t.Values[0] == decimal.MaxValue)
+            .Where(t => t.Values[1] == 0.0000000000000000000000000001m)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([decimal.MaxValue, 0.0000000000000000000000000001m]);
+    }
+
+    [TestMethod]
+    public void Solve_DecimalListSymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DecimalListEnvironment>()
+            .Where(t => t.Values[0] == 2.5m)
+            .Where(t => t.Values[1] == 1.5m)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([2.5m, 1.5m]);
+    }
+
+    /// <summary>
+    /// A <c>string</c> collection round-trips each element.
+    /// </summary>
+    /// <remarks>
+    /// The other domain case, alongside <c>bool</c>: a <c>string</c> collection was declared as
+    /// indexed by <c>String</c>, with a 16-bit bit-vector range that could not have held a
+    /// string either. Both halves were wrong, and both now come from the shared mapping - an
+    /// <c>Int</c> domain and the <c>String</c> sort a scalar uses. The empty string is included
+    /// because it is what completion supplies for a free element, so a test that pinned only
+    /// non-empty values could not tell a constrained element from an unconstrained one.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_StringArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<StringArrayEnvironment>()
+            .Where(t => t.Values[0] == "abc")
+            .Where(t => t.Values[1] == "")
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe(["abc", ""]);
+    }
+
+    /// <summary>
+    /// A <c>DateTime</c> collection round-trips each instant exactly, as UTC.
+    /// </summary>
+    /// <remarks>
+    /// <c>DateTime</c> shared the <c>long</c> row of the old mapping and failed the same two ways.
+    /// #56 had already corrected the element read to <c>FromFileTimeUtc</c>, so once the range
+    /// is <c>Int</c> nothing else on this path needs to change - the comment on #64 that
+    /// measured exactly that is what this test pins.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        DateTime first = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        DateTime second = new(2026, 6, 2, 9, 30, 0, DateTimeKind.Utc);
+
+        // Act
+        var result = context.NewTheorem<DateTimeArrayEnvironment>()
+            .Where(t => t.Values[0] == first)
+            .Where(t => t.Values[1] == second)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([first, second]);
+        result.Values[0].Kind.ShouldBe(DateTimeKind.Utc);
+        result.Values[1].Kind.ShouldBe(DateTimeKind.Utc);
+    }
+
+    [TestMethod]
+    public void Solve_DateTimeListSymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        DateTime instant = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        // Act
+        var result = context.NewTheorem<DateTimeListEnvironment>()
+            .Where(t => t.Values[0] == instant)
+            .Where(t => t.Values[1] == instant)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([instant, instant]);
+    }
+
+    /// <summary>
+    /// A <c>DateTime</c> collection with free elements reads back as UTC.
+    /// </summary>
+    /// <remarks>
+    /// The instants are completion's to choose and are not asserted - measured, they are
+    /// <c>1601-01-01T00:00:00Z</c>, file time zero, which is the earliest instant the encoding
+    /// can express (#83). The kind is fixed by the read path and can be asserted where the value
+    /// cannot, as the scalar family in <c>SymbolTypeMarshallingTests</c> does.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeArrayWithFreeElements_ReadsBackAsUtc()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DateTimeArrayEnvironment>()
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(2);
+        result.Values[0].Kind.ShouldBe(DateTimeKind.Utc);
+        result.Values[1].Kind.ShouldBe(DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// A <c>short</c> collection round-trips each element.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A <c>short</c> collection had three defects stacked, and this test is the first to reach
+    /// the third. The range was a 16-bit bit-vector, so the widened comparison failed in the
+    /// visitor (#64); behind that sat the <c>Convert</c> node #63 fixed for scalars, which the
+    /// guard there handles for a select just as well; and behind <em>that</em> the element loop
+    /// still shared its <c>Int16</c> arm with <c>Int32</c> and handed reflection an <c>int</c>.
+    /// The last was recorded on #64 when #63 was fixed, because it could not be tested until this
+    /// change made it reachable.
+    /// </para>
+    /// <para>
+    /// The arithmetic form is here rather than in a separate test because it is the one that
+    /// reaches the #63 guard: a bare equality against a constant is folded to a comparison of
+    /// the select with a literal, while an addition is where C# inserts the widening.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_ShortArraySymbol_RoundTripsEveryElement()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<ShortArrayEnvironment>()
+            .Where(t => t.Values[0] + t.Values[1] == 10)
+            .Where(t => t.Values[0] == 4)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([(short)4, (short)6]);
+    }
+
+    /// <summary>
+    /// A <c>short</c> element whose model value no <c>short</c> can hold fails loudly.
+    /// </summary>
+    /// <remarks>
+    /// The element read is a checked cast, as the scalar arm has been since #63 and for the same
+    /// reason: the array's range is an unbounded <c>Int</c>, so a constraint written against the
+    /// widened <c>int</c> can be satisfied by a value the element cannot hold, and an unchecked
+    /// cast would wrap it into a plausible wrong answer. #87 - bounding the symbol so Z3 cannot
+    /// pick such a value - applies to elements exactly as it does to scalars.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_ShortArrayElementConstrainedOutsideShortRange_ThrowsOverflowException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        int beyondShortRange = 40000;
+        var theorem = context.NewTheorem<ShortArrayEnvironment>()
+            .Where(t => t.Values[0] == beyondShortRange)
+            .Where(t => t.Length == 2);
+
+        // Act & Assert
+        Should.Throw<OverflowException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// A <c>decimal</c> collection with free elements is materialised at its initialised length.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The shape that reaches the element loop without naming a decimal constant, and the one
+    /// that observed #55 while #64 still stood: the decimal arm evaluated the whole array
+    /// constant instead of the element the loop had just selected, and cast the result to
+    /// <see cref="Microsoft.Z3.RatNum"/>, which an array expression can never satisfy. Before
+    /// #64 the fix could only be seen in which type the failing cast named; now the loop
+    /// completes, and reverting #55 fails this test outright.
+    /// </para>
+    /// <para>
+    /// The element values come from model completion and are not asserted.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DecimalArrayWithFreeElements_ReturnsTheInitialisedLength()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<DecimalArrayEnvironment>()
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(2);
     }
 
     /// <summary>
@@ -282,44 +594,45 @@ public class CollectionSymbolTests
     /// <c>ToArray</c> - and only the element read is shared.
     /// </remarks>
     [TestMethod]
-    public void Solve_DecimalListWithFreeElements_CastsTheElementNotTheArray()
+    public void Solve_DecimalListWithFreeElements_ReturnsTheInitialisedLength()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<DecimalListEnvironment>()
-            .Where(t => t.Length == 2);
 
         // Act
-        InvalidCastException exception = Should.Throw<InvalidCastException>(() => theorem.Solve());
+        var result = context.NewTheorem<DecimalListEnvironment>()
+            .Where(t => t.Length == 2)
+            .Solve();
 
         // Assert
-        exception.Message.ShouldNotContain("ArrayExpr");
-        exception.Message.ShouldContain("FPNum");
+        result.ShouldNotBeNull();
+        result.Values.Count.ShouldBe(2);
     }
 
     /// <summary>
-    /// The element loop is reached by a theorem that genuinely constrains the elements, not only
-    /// by one that leaves them out of the constraints altogether.
+    /// Elements of a <c>decimal</c> collection can be related to each other.
     /// </summary>
     /// <remarks>
-    /// Relating two elements to each other puts both selects in the formula while naming no
-    /// decimal constant, so nothing forces the sort mismatch #64 describes and translation
-    /// succeeds. Without this the fix could be dismissed as only mattering to empty theorems.
+    /// Relating two elements puts both selects in the formula while naming no constant, which
+    /// is the shape that reached the element loop under #64 and now yields a value. The lower
+    /// bound is there so the equality cannot be satisfied trivially by the completion default.
     /// </remarks>
     [TestMethod]
-    public void Solve_DecimalArrayWithElementsConstrainedToEachOther_CastsTheElementNotTheArray()
+    public void Solve_DecimalArrayWithElementsConstrainedToEachOther_ReturnsEqualElements()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<DecimalArrayEnvironment>()
-            .Where(t => t.Values[0] == t.Values[1]);
 
         // Act
-        InvalidCastException exception = Should.Throw<InvalidCastException>(() => theorem.Solve());
+        var result = context.NewTheorem<DecimalArrayEnvironment>()
+            .Where(t => t.Values[0] == t.Values[1])
+            .Where(t => t.Values[0] > 1.25m)
+            .Solve();
 
         // Assert
-        exception.Message.ShouldNotContain("ArrayExpr");
-        exception.Message.ShouldContain("FPNum");
+        result.ShouldNotBeNull();
+        result.Values[0].ShouldBeGreaterThan(1.25m);
+        result.Values[1].ShouldBe(result.Values[0]);
     }
 
     /// <summary>
@@ -501,25 +814,29 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#64): a field is no better off than a property for element types other than
-    /// <c>int</c>.
+    /// A field is no different from a property for element types other than <c>int</c>.
     /// </summary>
     /// <remarks>
-    /// Translation fails before any marshalling happens, so this failed identically before #53 was
-    /// fixed. It is here so the fix cannot be mistaken for having widened the element types a
-    /// field supports. See <see cref="Solve_LongArraySymbol_ThrowsZ3Exception"/>.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// This was pinned as a failure while #64 stood, so that the #53 fix could not be mistaken
+    /// for having widened the element types a field supports. It is kept as the positive case
+    /// for the same reason in reverse: the sort mapping is chosen before the member kind matters,
+    /// so a field gets the corrected declaration exactly as a property does.
     /// </remarks>
     [TestMethod]
-    public void Solve_LongArrayInAPublicField_ThrowsZ3Exception()
+    public void Solve_LongArrayInAPublicField_RoundTripsEveryElement()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<LongFieldCollectionEnvironment>()
-            .Where(t => t.Values[0] == 1L);
 
-        // Act & Assert
-        Should.Throw<Microsoft.Z3.Z3Exception>(() => theorem.Solve());
+        // Act
+        var result = context.NewTheorem<LongFieldCollectionEnvironment>()
+            .Where(t => t.Values[0] == 9_000_000_000L)
+            .Where(t => t.Values[1] == 2L)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.ShouldBe([9_000_000_000L, 2L]);
     }
 
     /// <summary>
@@ -689,6 +1006,48 @@ public class CollectionSymbolTests
     private sealed class DecimalListEnvironment
     {
         public List<decimal> Values { get; set; } = [0m, 0m];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class LongListEnvironment
+    {
+        public List<long> Values { get; set; } = [0L, 0L];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class BoolListEnvironment
+    {
+        public List<bool> Values { get; set; } = [false, false];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class StringArrayEnvironment
+    {
+        public string[] Values { get; set; } = new string[2];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class DateTimeArrayEnvironment
+    {
+        public DateTime[] Values { get; set; } = new DateTime[2];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class DateTimeListEnvironment
+    {
+        public List<DateTime> Values { get; set; } = [default, default];
+
+        public int Length { get; set; }
+    }
+
+    private sealed class ShortArrayEnvironment
+    {
+        public short[] Values { get; set; } = new short[2];
 
         public int Length { get; set; }
     }
