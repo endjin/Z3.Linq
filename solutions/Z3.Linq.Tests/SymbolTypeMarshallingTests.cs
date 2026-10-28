@@ -11,10 +11,10 @@ namespace Z3.Linq.Tests;
 /// which solution was chosen.
 /// </para>
 /// <para>
-/// Three of the types listed as supported do not work, and are pinned as characterisation tests
-/// rather than skipped - short (#63), float (#54) and DateTime (#56). All three fail in the
-/// marshalling layer, which no example in the repository exercises, which is why they went
-/// unnoticed.
+/// Two of the types listed as supported do not work, and are pinned as characterisation tests
+/// rather than skipped - short (#63) and DateTime (#56). Both fail in the marshalling layer,
+/// which no example in the repository exercises, which is why they went unnoticed. float was a
+/// third until #54 was fixed.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -181,24 +181,131 @@ public class SymbolTypeMarshallingTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#54): a float symbol solves but cannot be marshalled back.
+    /// A <c>float</c> symbol round-trips the value it was constrained to.
     /// </summary>
     /// <remarks>
-    /// TypeCode.Single parses the model value into a double (Theorem.cs:530) and then writes it
-    /// to a float property, which reflection rejects. Note this fails later than short does -
-    /// translation and solving both succeed, so only the result is lost.
+    /// The case in #54. <c>TypeCode.Single</c> parsed the model value with <c>double.Parse</c>,
+    /// so a perfectly good answer was boxed as a <c>double</c> and reflection then refused to
+    /// write it to a <c>float</c> member. Nothing about the solve was wrong - translation, the
+    /// solver and the model were all fine, and only the last step lost the result.
+    /// </remarks>
+    [TestMethod]
+    [DataRow(1.5f, DisplayName = "Exactly representable")]
+    [DataRow(0f, DisplayName = "Zero")]
+    [DataRow(-2.25f, DisplayName = "Negative")]
+    [DataRow(0.1f, DisplayName = "Not exactly representable in binary")]
+    [DataRow(1.2345678f, DisplayName = "Eight significant digits")]
+    [DataRow(float.MaxValue, DisplayName = "Single.MaxValue")]
+    public void Solve_FloatSymbol_RoundTripsTheValue(float value)
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<float, int>>()
+            .Where(t => t.X1 == value)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(value);
+    }
+
+    /// <summary>
+    /// A <c>float</c> and a <c>double</c> in one environment each come back as their own type.
+    /// </summary>
+    /// <remarks>
+    /// The two share the real sort and sit on adjacent arms of the marshalling switch, differing
+    /// only in how many decimal places they ask the model for. A fix that made <c>float</c> work
+    /// by treating it as a <c>double</c> would pass every test above and fail here.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_FloatAndDoubleSymbolsTogether_MarshalEachToItsOwnType()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<float, double>>()
+            .Where(t => t.X1 == 1.5f)
+            .Where(t => t.X2 == 2.5)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(1.5f);
+        result.X2.ShouldBe(2.5);
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#6): a value whose decimal expansion does not terminate cannot be read back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>RatNum.ToDecimalString</c> marks a truncated expansion by appending <c>?</c>, and
+    /// neither the <c>Single</c> nor the <c>Double</c> arm strips it before parsing - only the
+    /// <c>Decimal</c> arm does. A third solves perfectly well and then fails on the way out with
+    /// <c>The input string '0.33333333333333333333333333333333?' was not in a correct format</c>.
+    /// </para>
+    /// <para>
+    /// This is not #54 and was not introduced by fixing it: the <c>double</c> case below fails
+    /// identically, at 64 decimal places rather than 32. Both are here so the defect is recorded
+    /// as shared rather than looking like a float problem.
+    /// These tests pin current behaviour and must be updated when the defect is fixed.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_FloatSymbolWithANonTerminatingValue_ThrowsFormatException()
+    {
+        // Arrange: a third has no finite decimal expansion, so the model value comes back
+        // truncated and flagged.
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<Symbols<float, int>>()
+            .Where(t => t.X1 * 3 == 1);
+
+        // Act & Assert
+        Should.Throw<FormatException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#6). The <c>double</c> form, which behaves identically.
+    /// See <see cref="Solve_FloatSymbolWithANonTerminatingValue_ThrowsFormatException"/>.
+    /// </summary>
+    [TestMethod]
+    public void Solve_DoubleSymbolWithANonTerminatingValue_ThrowsFormatException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem<Symbols<double, int>>()
+            .Where(t => t.X1 * 3 == 1);
+
+        // Act & Assert
+        Should.Throw<FormatException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#6): the smallest positive <c>float</c> cannot be read back either, because
+    /// 32 decimal places cannot express it at all.
+    /// </summary>
+    /// <remarks>
+    /// The <c>Single</c> arm asks the model for 32 decimal places, which reads as a nod to
+    /// float's 32 bits but is a count of decimal digits after the point. <c>Single.Epsilon</c> is
+    /// about 1.4e-45, so every one of those 32 places is a zero and the value is reported as
+    /// <c>0.00000000000000000000000000000000?</c> - truncated to nothing. The <c>Double</c> arm
+    /// has the same shape at 64 places against a range reaching 5e-324, so this is a property of
+    /// the pair rather than of float.
     /// This test pins current behaviour and must be updated when the defect is fixed.
     /// </remarks>
     [TestMethod]
-    public void Solve_FloatSymbol_ThrowsArgumentException()
+    public void Solve_FloatSymbolAtItsSmallestPositiveValue_ThrowsFormatException()
     {
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<float, int>>()
-            .Where(t => t.X1 == 1.5f);
+            .Where(t => t.X1 == float.Epsilon);
 
         // Act & Assert
-        Should.Throw<ArgumentException>(() => theorem.Solve());
+        Should.Throw<FormatException>(() => theorem.Solve());
     }
 
     /// <summary>
@@ -261,15 +368,16 @@ public class SymbolTypeMarshallingTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The tests above pin what each type does with a value; these five pin what each does with
+    /// The tests above pin what each type does with a value; these six pin what each does with
     /// no value at all. Every type takes a different arm of the marshalling switch, so each can
     /// regress on its own, and all but <c>bool</c> threw before #51. The value a free symbol
     /// comes back with is supplied by model completion and is deliberately not asserted.
     /// </para>
     /// <para>
-    /// <c>short</c> and <c>float</c> are absent on purpose: an unconstrained one now evaluates
-    /// cleanly and then fails at the reflection write, which is #63 and #54 respectively rather
-    /// than anything to do with completion. Their pins above are unchanged.
+    /// <c>short</c> is absent on purpose: an unconstrained one evaluates cleanly and then fails
+    /// at the reflection write, which is #63 rather than anything to do with completion. Its pin
+    /// above is unchanged. <c>float</c> failed the same way until #54 was fixed, and now has a
+    /// case here like every other working type.
     /// </para>
     /// </remarks>
     [TestMethod]
@@ -297,6 +405,23 @@ public class SymbolTypeMarshallingTests
 
         // Act
         var result = context.NewTheorem<Symbols<double, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
+
+    [TestMethod]
+    public void Solve_UnconstrainedFloatSymbol_ReturnsAResult()
+    {
+        // Arrange: the other real-sorted arm, which needs both #51 and #54 to get here - model
+        // completion to produce a numeral at all, and a float.Parse to write it anywhere.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<float, int>>()
             .Where(t => t.X2 == 0)
             .Solve();
 

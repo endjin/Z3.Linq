@@ -468,7 +468,7 @@ public class Theorem
                             numVal = numValExpr.IsTrue;
                             break;
                         case TypeCode.Single:
-                            numVal = double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
+                            numVal = float.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
                             break;
                         case TypeCode.Decimal:
                             Expr val = EvaluateWithCompletion(model, subEnv.Expr ?? throw new ArgumentException(
@@ -528,7 +528,7 @@ public class Theorem
                     value = val.IsTrue;
                     break;
                 case TypeCode.Single:
-                    value = double.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
+                    value = float.Parse(((RatNum)val).ToDecimalString(32), CultureInfo.InvariantCulture);
                     break;
                 case TypeCode.Decimal:
 
