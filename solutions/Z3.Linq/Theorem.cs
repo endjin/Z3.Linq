@@ -619,14 +619,6 @@ public class Theorem
     }
 
     /// <summary>
-    /// Gets the solution object for the solved theorem.
-    /// </summary>
-    /// <typeparam name="T">Environment type to create an instance of.</typeparam>
-    /// <param name="context">Z3 context.</param>
-    /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
-    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
-    /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
-    /// <summary>
     /// Reads <paramref name="member"/> off <paramref name="instance"/>, or returns
     /// <see langword="null"/> if there is no instance to read it from.
     /// </summary>
@@ -649,6 +641,15 @@ public class Theorem
         return type.IsArray || (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type.GetGenericTypeDefinition()));
     }
 
+    /// <summary>
+    /// Gets the solution object for the solved theorem.
+    /// </summary>
+    /// <typeparam name="T">Environment type to create an instance of.</typeparam>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
+    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
+    /// <param name="template">An instance of <typeparamref name="T"/> whose collections give the solution's their length, or null.</param>
+    /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
     private static T GetSolution<T>(Context context, Model model, Environment environment, object? template)
     {
         Type t = typeof(T);

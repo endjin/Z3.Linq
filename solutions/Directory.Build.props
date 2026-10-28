@@ -9,6 +9,13 @@
          and arm64 on all three platforms, so AnyCPU lets each machine resolve the one it
          needs; pinning x64 here would shut arm64 out. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Generate the XML documentation file for every project. Two reasons. It makes the
+         compiler parse the doc comments, so malformed XML and unresolvable crefs are build
+         errors under TreatWarningsAsErrors rather than something a reviewer has to spot; and
+         it gives the packable projects a documentation file to ship, without which consumers
+         get no IntelliSense. CS1591 - a public member with no comment - is enforced only for
+         Z3.Linq; the other projects suppress it, each saying why. See #82. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!-- Package metadata common to the packable projects. Per-package values stay in the

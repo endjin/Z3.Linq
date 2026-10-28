@@ -3,6 +3,10 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <RootNamespace>Z3.Linq.Tests</RootNamespace>
+    <!-- The doc comments here are validated like everyone else's (Directory.Build.props), but
+         a test's name is its documentation and CS1591 would demand a comment on every test
+         class and method. See #82. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>

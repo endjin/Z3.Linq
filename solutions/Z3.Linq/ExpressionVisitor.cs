@@ -10,6 +10,14 @@ using MiaPlaza.ExpressionUtils.Evaluating;
 
 using Microsoft.Z3;
 
+/// <summary>
+/// Translates the LINQ expression trees of the constraints of a theorem into Z3 expressions.
+/// </summary>
+/// <remarks>
+/// Driven by <c>Theorem</c> during <c>Solve</c> and <c>Optimize</c>, which build the
+/// <see cref="Environment"/> it translates against. It is public for historical reasons; there
+/// is no supported reason to call it directly.
+/// </remarks>
 public static class ExpressionVisitor
 {
     /// <summary>
