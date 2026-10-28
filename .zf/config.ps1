@@ -32,7 +32,7 @@ $SkipPackage = $false
 #
 # Build process configuration
 #
-$SolutionToBuild = (Resolve-Path (Join-Path $here "./solutions/Z3.Linq.sln")).Path
+$SolutionToBuild = (Resolve-Path (Join-Path $here "./solutions/Z3.Linq.slnx")).Path
 $ProjectsToPublish = @()
 $NugetPublishSource = property ZF_NUGET_PUBLISH_SOURCE "$here/_local-nuget-feed"
 $IncludeAssembliesInCodeCoverage = "Z3.Linq*"
