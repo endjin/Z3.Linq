@@ -6,7 +6,7 @@ Based on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) w
 
 ## Examples
 
-A number of examples are included in this solution, which you can run [from .NET Interactive](examples/z3-problems.dib) (requires [Visual Studio Code](https://code.visualstudio.com/)) or [from Visual Studio](solutions/Z3.Linq.Demo/Program.cs).
+A number of examples are included as standalone [Spectre.Console](https://spectreconsole.net/) demos in [`demos/`](demos), each a single-file .NET app. Run the interactive launcher with `dotnet run demos/menu.cs`, or run any one directly, e.g. `dotnet run demos/sudoku.cs`; see the [demos README](demos/README.md) for the full list.
 
 ### Problem - 1st Order Propositional Logic
 
@@ -239,20 +239,6 @@ throws, so it can never be mistaken for one.
 
 You can install the [Z3.Linq NuGet Package](https://www.nuget.org/packages/Z3.Linq/).
 
-### For Polyglot Notebooks
-
-Add the package:
-```
-#r "nuget:Z3.Linq"
-```
-Then add the following using statements:
-
-```csharp
-using System;
-using Z3.Linq;
-```
-Then you can copy any of the above samples.
-
 ### For Visual Studio
 
 Add the `Z3.Linq` package. No platform target is needed: `Microsoft.Z3` supplies native binaries for x64 and arm64 on Windows, Linux and macOS, and the default `AnyCPU` resolves the right one.
@@ -296,7 +282,7 @@ All PRs are welcome.
 
 2020: [Karel Frajtak](https://github.com/kfrajtak) adds [support for fractions](https://github.com/kfrajtak/Z3.LinqBinding).
 
-2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0`, added `Optimize` support via LINQ's `OrderBy`, [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support, demonstrate using `record` types, and fix nullability issues. They upgraded the solution to use [Z3 NuGet package](https://www.nuget.org/packages/Microsoft.Z3.x64/), merged in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, created archives of Bart's original blog posts and talks. They republished the project as [Z3.Linq](https://github.com/endjin/Z3.Linq), created a new [Polyglot Notebook](https://github.com/dotnet/interactive) of [samples](examples/z3-problems.dib), and published a NuGet package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
+2021: [Howard van Rooijen](https://github.com/HowardvanRooijen) and [Ian Griffiths](https://github.com/idg10) ([endjin](https://github.com/endjin)) upgrade the project to `.NET 6.0`, added `Optimize` support via LINQ's `OrderBy`, [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0) support, demonstrate using `record` types, and fix nullability issues. They upgraded the solution to use [Z3 NuGet package](https://www.nuget.org/packages/Microsoft.Z3.x64/), merged in features from [Jean-Sylvain Boige](https://github.com/jsboige) and [Karel Frajtak](https://github.com/kfrajtak) forks, created archives of Bart's original blog posts and talks. They republished the project as [Z3.Linq](https://github.com/endjin/Z3.Linq) and published a NuGet package [Z3.Linq](https://www.nuget.org/packages/Z3.Linq/).
 
 2023: [Whit Waldo](https://github.com/WhitWaldo) upgrades the project to `.NET 8.0`
 
