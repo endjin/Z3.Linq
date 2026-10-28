@@ -658,31 +658,32 @@ internal sealed class ExpressionVisitor
 
         var topMember = hierarchy.First();
 
-        if (topMember.Expression != this.param)
+        // A chain that starts at a constant or at a static member names a value, not a symbol, and
+        // is read now and translated as a constant. A captured variable is a field on the
+        // compiler's closure, which reaches here as a constant; a static field or property - such
+        // as DateTime.MaxValue, which is static readonly rather than const, so the compiler leaves
+        // it as a member access - has no instance at all. Each member is read from the value of
+        // the one before it, so a chain such as holder.In.Value works at any length.
+        if (topMember.Expression is ConstantExpression or null)
         {
-            if ((topMember.Expression is ConstantExpression expression))
+            object? value = (topMember.Expression as ConstantExpression)?.Value;
+
+            foreach (MemberExpression link in hierarchy)
             {
-                // We only ever get here if SimplifyLambda is set to false, otherwise partial evaluation does it earlier
-                var target = expression.Value;
-                var hierarchyIdx = 0;
-                object? val = target;
-
-                while (hierarchyIdx < hierarchy.Count)
+                if (value is null && link.Expression is not null)
                 {
-                    var currentMember = hierarchy[hierarchyIdx].Member;
-
-                    val = currentMember switch
-                    {
-                        PropertyInfo property => property.GetValue(target),
-                        FieldInfo field => field.GetValue(target),
-                        _ => throw new NotSupportedException($"Unsupported constant {target} ."),
-                    };
-
-                    hierarchyIdx++;
+                    throw new NotSupportedException($"Could not reduce '{member}': '{link.Expression}' is null.");
                 }
 
-                return VisitConstantValue(val ?? throw new NotSupportedException($"Could not reduce expression {topMember.Expression}"));
+                value = link.Member switch
+                {
+                    PropertyInfo property => property.GetValue(value),
+                    FieldInfo field => field.GetValue(value),
+                    _ => throw new NotSupportedException($"Unsupported member '{link.Member.Name}' in '{member}'."),
+                };
             }
+
+            return VisitConstantValue(value ?? throw new NotSupportedException($"Could not reduce '{member}': its value is null."));
         }
 
         // Only members we allow currently are direct accesses to the theorem's variables
