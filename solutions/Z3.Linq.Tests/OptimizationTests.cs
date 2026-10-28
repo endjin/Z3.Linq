@@ -31,7 +31,6 @@ public class OptimizationTests
         var result = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 5)
             .Where(t => t.X1 <= 9)
-            .Where(t => t.X2 == 0)
             .Optimize(Optimization.Minimize, t => t.X1);
 
         // Assert
@@ -49,7 +48,6 @@ public class OptimizationTests
         var result = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 5)
             .Where(t => t.X1 <= 9)
-            .Where(t => t.X2 == 0)
             .Optimize(Optimization.Maximize, t => t.X1);
 
         // Assert
@@ -66,8 +64,7 @@ public class OptimizationTests
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 5)
-            .Where(t => t.X1 <= 9)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 <= 9);
 
         // Act
         var minimum = theorem.Optimize(Optimization.Minimize, t => t.X1);
@@ -87,8 +84,7 @@ public class OptimizationTests
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 3)
-            .Where(t => t.X1 <= 8)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 <= 8);
 
         // Act
         var viaOptimize = theorem.Optimize(Optimization.Minimize, t => t.X1);
@@ -107,8 +103,7 @@ public class OptimizationTests
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 3)
-            .Where(t => t.X1 <= 8)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 <= 8);
 
         // Act
         var viaOptimize = theorem.Optimize(Optimization.Maximize, t => t.X1);
@@ -129,8 +124,7 @@ public class OptimizationTests
         using var log = new StringWriter();
         using var context = new Z3Context { Log = log };
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => t.X1 >= 3)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 >= 3);
 
         // Act
         var deferred = theorem.OrderBy(t => t.X1);
@@ -150,8 +144,7 @@ public class OptimizationTests
         using var log = new StringWriter();
         using var context = new Z3Context { Log = log };
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => t.X1 >= 3)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 >= 3);
 
         // Act
         var deferred = theorem.OrderByDescending(t => t.X1);
@@ -223,8 +216,7 @@ public class OptimizationTests
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 5)
-            .Where(t => t.X1 <= 100)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 <= 100);
 
         // Act
         var minimised = theorem.Optimize(Optimization.Minimize, t => t.X1);
@@ -243,8 +235,7 @@ public class OptimizationTests
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 1)
-            .Where(t => t.X1 <= 4)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 <= 4);
 
         // Act
         var first = theorem.Optimize(Optimization.Minimize, t => t.X1);
@@ -267,8 +258,7 @@ public class OptimizationTests
         // than defaulting to one of them (Theorem.cs:118).
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => t.X1 == 1)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 == 1);
 
         // Act & Assert
         Should.Throw<ArgumentOutOfRangeException>(
@@ -329,8 +319,7 @@ public class OptimizationTests
         using var context = new Z3Context();
         var parent = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 >= 1)
-            .Where(t => t.X1 <= 10)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 <= 10);
         var child = parent.Where(t => t.X1 >= 6);
 
         // Act

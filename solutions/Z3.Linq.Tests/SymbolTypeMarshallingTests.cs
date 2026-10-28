@@ -43,7 +43,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 == value)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -65,7 +64,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<long, int>>()
             .Where(t => t.X1 == value)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -84,7 +82,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<bool, int>>()
             .Where(t => t.X1 == value)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -106,7 +103,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<double, int>>()
             .Where(t => t.X1 == value)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -125,7 +121,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<decimal, int>>()
             .Where(t => t.X1 == Value)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -145,7 +140,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<string, int>>()
             .Where(t => t.X1 == value)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -165,7 +159,6 @@ public class SymbolTypeMarshallingTests
         var result = context.NewTheorem<Symbols<double, int>>()
             .Where(t => t.X1 > 10.5)
             .Where(t => t.X1 < 11.0)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -190,8 +183,7 @@ public class SymbolTypeMarshallingTests
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<short, short>>()
-            .Where(t => t.X1 == 7)
-            .Where(t => t.X2 == 1);
+            .Where(t => t.X1 == 7);
 
         // Act & Assert
         Should.Throw<InvalidCastException>(() => theorem.Solve());
@@ -212,8 +204,7 @@ public class SymbolTypeMarshallingTests
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<float, int>>()
-            .Where(t => t.X1 == 1.5f)
-            .Where(t => t.X2 == 0);
+            .Where(t => t.X1 == 1.5f);
 
         // Act & Assert
         Should.Throw<ArgumentException>(() => theorem.Solve());
@@ -240,7 +231,6 @@ public class SymbolTypeMarshallingTests
         // Act
         var result = context.NewTheorem<Symbols<DateTime, int>>()
             .Where(t => t.X1 == utc)
-            .Where(t => t.X2 == 0)
             .Solve();
 
         // Assert
@@ -309,7 +299,6 @@ public class SymbolTypeMarshallingTests
                 using var context = new Z3Context();
                 _ = context.NewTheorem<Symbols<double, int>>()
                     .Where(t => t.X1 == 1.5)
-                    .Where(t => t.X2 == 0)
                     .Solve();
             }
             catch (Exception ex)
@@ -337,18 +326,29 @@ public class SymbolTypeMarshallingTests
         // that the two differ only by culture. This is what the defect above should look like
         // once it is fixed.
         double? value = null;
+        Exception? captured = null;
 
         var thread = new Thread(() =>
         {
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
-            using var context = new Z3Context();
-            var result = context.NewTheorem<Symbols<double, int>>()
-                .Where(t => t.X1 == 1.5)
-                .Where(t => t.X2 == 0)
-                .Solve();
+            try
+            {
+                using var context = new Z3Context();
+                var result = context.NewTheorem<Symbols<double, int>>()
+                    .Where(t => t.X1 == 1.5)
+                    .Solve();
 
-            value = result?.X1;
+                value = result?.X1;
+            }
+            catch (Exception ex)
+            {
+                // Captured rather than left to escape: an exception on a bare thread is
+                // unhandled, so it takes down the test host and the run reports "zero tests
+                // ran" rather than one failed test. The pin above already does this; this
+                // counterpart did not, because it was not expected to throw.
+                captured = ex;
+            }
         });
 
         // Act
@@ -356,6 +356,7 @@ public class SymbolTypeMarshallingTests
         thread.Join(SolveTimeout).ShouldBeTrue("the solve on the invariant-culture thread did not finish");
 
         // Assert
+        captured.ShouldBeNull();
         value.ShouldBe(1.5);
     }
 

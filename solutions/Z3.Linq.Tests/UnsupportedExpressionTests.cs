@@ -38,8 +38,7 @@ public class UnsupportedExpressionTests
         // express if-then-else, so this is a gap rather than a fundamental limit.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => (t.X1 > 0 ? t.X1 : 0) == 1)
-            .Where(t => t.X2 == 0);
+            .Where(t => (t.X1 > 0 ? t.X1 : 0) == 1);
 
         // Act & Assert
         Should.Throw<NotSupportedException>(() => theorem.Solve());
@@ -54,8 +53,7 @@ public class UnsupportedExpressionTests
         // (ExpressionVisitor.cs:277).
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => Increment(t.X1) == 2)
-            .Where(t => t.X2 == 0);
+            .Where(t => Increment(t.X1) == 2);
 
         // Act & Assert
         Should.Throw<NotSupportedException>(() => theorem.Solve());
@@ -70,8 +68,7 @@ public class UnsupportedExpressionTests
         // than NotSupportedException - the throw sites are not consistent about which they use.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => (long)t.X1 == 1L)
-            .Where(t => t.X2 == 0);
+            .Where(t => (long)t.X1 == 1L);
 
         // Act & Assert
         Should.Throw<NotImplementedException>(() => theorem.Solve());
@@ -162,7 +159,6 @@ public class UnsupportedExpressionTests
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => t.X1 > 0)
-            .Where(t => t.X2 == 0)
             .Where(t => (t.X1 > 5 ? t.X1 : 0) == 6);
 
         // Act & Assert
