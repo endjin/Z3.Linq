@@ -46,6 +46,28 @@ public class SolveLimitTests
     }
 
     /// <summary>
+    /// A sub-millisecond timeout still bounds the solve, rather than silently becoming no timeout.
+    /// </summary>
+    /// <remarks>
+    /// Z3's timeout is whole milliseconds, and a <see cref="TimeSpan"/> below one millisecond used
+    /// to truncate to 0 - which Z3 reads as unlimited - so a caller who asked for a tiny timeout
+    /// would hang on an undecidable theorem. A positive timeout now rounds up to at least one
+    /// millisecond. The <see cref="TimeoutAttribute"/> fails this test rather than hanging if the
+    /// truncation returns.
+    /// </remarks>
+    [TestMethod]
+    [Timeout(HangGuardMilliseconds)]
+    public void Solve_UndecidableTheoremWithASubMillisecondTimeout_StillThrows()
+    {
+        // Arrange
+        using var context = new Z3Context { Timeout = TimeSpan.FromMilliseconds(0.5) };
+        var theorem = SumOfThreeCubes(context);
+
+        // Act & Assert
+        Should.Throw<TheoremUndecidedException>(() => theorem.Solve());
+    }
+
+    /// <summary>
     /// A solve that stopped without deciding throws rather than returning <see langword="false"/>.
     /// </summary>
     /// <remarks>
