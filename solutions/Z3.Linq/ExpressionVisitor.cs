@@ -117,23 +117,37 @@ public static class ExpressionVisitor
 
         var inner = Visit(context, environment, expression.Operand, param);
 
-        switch (Type.GetTypeCode(expression.Type))
+        // A numeric conversion the compiler inserted, or the caller wrote, means one of three
+        // things in Z3, and which one depends on the sorts involved rather than on the CLR
+        // types: nothing at all when both types map to the same sort (short to int, int to
+        // long, float to double, a cast that only narrows); integer-to-real when the operand is
+        // an integer and the target a real (int to double, int to decimal); real-to-integer the
+        // other way round. The target sort comes from the same mapping the symbols are declared
+        // with, so a conversion can never disagree with a symbol about what a type is.
+        //
+        // This used to be a switch on the target type alone, which assumed the operand sort from
+        // it - int-to-real for every conversion to double, real-to-int for every conversion to
+        // int - and had no arm at all for long, float or decimal. See #63 and #76.
+        Sort? targetSort = expression.Type == typeof(char)
+            ? context.IntSort
+            : Theorem.TryGetSymbolSort(context, Type.GetTypeCode(expression.Type));
+
+        if (targetSort is not null)
         {
-            case TypeCode.Double:
-                return context.MkInt2Real((IntExpr)inner);
-            case TypeCode.Int32 when inner.IsInt:
-                // A widening onto a value Z3 already holds at integer sort is a no-op: short to
-                // int, or an enum to its underlying int. Only a real operand needs converting,
-                // and reading the target type alone cannot tell the two apart. See #63.
+            if (inner.Sort.Equals(targetSort))
+            {
                 return inner;
-            case TypeCode.Int32:
+            }
+
+            if (inner.IsInt && targetSort is RealSort)
+            {
+                return context.MkInt2Real((IntExpr)inner);
+            }
+
+            if (inner.IsReal && targetSort is IntSort)
+            {
                 return context.MkReal2Int((RealExpr)inner);
-            case TypeCode.Char:
-                if (inner.IsInt)
-                {
-                    return inner;// context.MkInt(1);// ((IntExpr)inner).int);
-                }
-                break;
+            }
         }
 
         throw new NotImplementedException($"Cast '{expression.Operand} ({expression.Operand.Type})' to {expression.Type}");

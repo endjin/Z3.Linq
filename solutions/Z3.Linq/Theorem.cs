@@ -229,13 +229,20 @@ public class Theorem
     /// if the type is not one the library maps.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This is the only mapping from CLR type to sort. A scalar symbol is a constant of this sort,
     /// and a collection symbol is a Z3 array from <c>Int</c> to it, so the two cannot disagree -
     /// there is nothing else to consult. Collections used to carry a mapping of their own, and
     /// only its <c>int</c> row agreed with this one; every other element type declared a domain or
     /// range that contradicted how its elements were constrained and read back. See #64.
+    /// </para>
+    /// <para>
+    /// <see cref="ExpressionVisitor"/> asks the same question when a constraint converts between
+    /// CLR types: whether the conversion is a no-op, an integer-to-real, or a real-to-integer
+    /// depends only on the sorts the two types map to here. See #76.
+    /// </para>
     /// </remarks>
-    private static Sort? TryGetSymbolSort(Context context, TypeCode typeCode)
+    internal static Sort? TryGetSymbolSort(Context context, TypeCode typeCode)
     {
         return typeCode switch
         {
