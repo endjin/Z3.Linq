@@ -8,6 +8,34 @@ Based on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) w
 
 A number of examples are included as standalone [Spectre.Console](https://spectreconsole.net/) demos in [`demos/`](demos), each a single-file .NET app. Run the interactive launcher with `dotnet run demos/menu.cs`, or run any one directly, e.g. `dotnet run demos/sudoku.cs`; see the [demos README](demos/README.md) for the full list.
 
+### Ports from "SAT/SMT by Example"
+
+Eleven demos port problems from Dennis Yurichev's [SAT/SMT by Example](https://smt.st) to Z3.Linq:
+bit-twiddling proofs (XOR swap, Dietz's average, branchless abs/min/max, the zero-byte hack, modular inverse),
+SEND + MORE = MONEY, the Zebra puzzle, N queens, the assignment problem, Kantorovich's wood-workshop cutting
+problem, two small knapsacks (popsicles and XKCD 287), package dependency resolution, map colouring and
+committee scheduling, job-shop scheduling, and Killer and Greater-Than Sudoku. Each demo cites its section of the book.
+
+### Problem - Proving a Bit-Twiddling Trick
+
+`uint` and `ulong` symbols are bit-vectors with C#'s wrapping arithmetic, so Z3 can prove a trick correct for
+every input: ask for a counterexample, and `TrySolve` returning `false` is the proof.
+
+```csharp
+using (var ctx = new Z3Context())
+{
+    // XOR swap: is (x4, y3) always (y1, x1)?
+    var counterexample = from t in ctx.NewTheorem<(uint x1, uint y1, uint x2, uint y3, uint x4)>()
+                         where t.x2 == (t.x1 ^ t.y1)
+                         where t.y3 == (t.y1 ^ t.x2)
+                         where t.x4 == (t.x2 ^ t.y3)
+                         where !(t.x4 == t.y1 && t.y3 == t.x1)
+                         select t;
+
+    Console.WriteLine(counterexample.TrySolve(out _) ? "Broken" : "Proved for every pair of inputs");
+}
+```
+
 ### Problem - 1st Order Propositional Logic
 
 Provide a solution where either X is true or Y is true, but not both (using a [ValueTuple](https://docs.microsoft.com/en-us/dotnet/api/system.valuetuple?view=net-6.0)).
