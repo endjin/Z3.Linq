@@ -256,7 +256,7 @@ public class Theorem
     {
         var toReturn = new Environment();
 
-        if (targetType.IsArray || (targetType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(targetType.GetGenericTypeDefinition())))
+        if (IsCollection(targetType))
         {
             Type? elType;
 
@@ -404,7 +404,7 @@ public class Theorem
         TypeCode typeCode = Type.GetTypeCode(parameterType);
         if (typeCode == TypeCode.Object)
         {
-            if (parameterType.IsArray || (parameterType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(parameterType.GetGenericTypeDefinition())))
+            if (IsCollection(parameterType))
             {
                 Type eltType = parameterType.IsArray ? parameterType.GetElementType()! : parameterType.GetGenericArguments()[0];
 
@@ -592,6 +592,15 @@ public class Theorem
     /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
     /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
     /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
+    /// <summary>
+    /// Whether <paramref name="type"/> is one the library treats as a collection symbol: an
+    /// array, or a generic type implementing <see cref="IEnumerable"/>.
+    /// </summary>
+    private static bool IsCollection(Type type)
+    {
+        return type.IsArray || (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type.GetGenericTypeDefinition()));
+    }
+
     private static T GetSolution<T>(Context context, Model model, Environment environment)
     {
         Type t = typeof(T);
@@ -633,22 +642,26 @@ public class Theorem
                     continue;
                 }
 
-                // Evaluation of the values though the handle in the environment bindings.
                 var subEnv = environment.Properties[parameter];
 
-                Expr val = EvaluateWithCompletion(model, subEnv.Expr);
-                if (parameter.PropertyType == typeof(bool))
+                // The same marshaller a named environment uses, so an anonymous one supports the
+                // same types - including a nested object, which is materialised by the recursion
+                // inside ConvertZ3Expression rather than evaluated here. This branch used to carry
+                // a marshaller of its own that handled bool and int, and evaluated the handle
+                // before checking the type - so a nested object, whose handle is null, reached Z3
+                // and surfaced as a NullReferenceException. See #75.
+                //
+                // A collection is the one thing the shared path cannot do for an anonymous type:
+                // the element count is read from the collection already on the instance, and the
+                // instance here is uninitialised - the one passed to NewTheorem is discarded - so
+                // there is nothing to read it from. Reject it by name rather than let that read
+                // fail on a null.
+                if (IsCollection(parameter.PropertyType))
                 {
-                    field.SetValue(result, val.IsTrue);
+                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + ": a collection in an anonymous environment cannot be pre-sized.");
                 }
-                else if (parameter.PropertyType == typeof(int))
-                {
-                    field.SetValue(result, ((IntNum)val).Int);
-                }
-                else
-                { 
-                    throw new NotSupportedException("Unsupported parameter type for " + parameter.Name + "."); 
-                }
+
+                field.SetValue(result, ConvertZ3Expression(result, context, model, subEnv, parameter));
             }
 
             return result;
@@ -725,18 +738,7 @@ public class Theorem
     /// overrides a value the solver chose - so symbols the model does interpret are
     /// unaffected. See https://github.com/endjin/Z3.Linq/issues/51.
     /// </para>
-    /// <para>
-    /// <paramref name="expr"/> is nullable because <c>Environment.Expr</c> is, and the
-    /// anonymous-type branch of <c>GetSolution</c> passes it without the guard the three sites
-    /// in <c>ConvertZ3Expression</c> use. A null reaches Microsoft.Z3 and surfaces as a
-    /// <c>NullReferenceException</c> - reachable today with an anonymous environment holding a
-    /// nested object, and tracked by https://github.com/endjin/Z3.Linq/issues/75. Declaring the
-    /// parameter nullable states that honestly; a non-nullable one would need a suppression or
-    /// a new guard here, and either would change behaviour that this change deliberately leaves
-    /// alone. Issue 75 proposes the better fix - checking the property type before evaluating,
-    /// so the existing <c>NotSupportedException</c> fires and names the property.
-    /// </para>
     /// </remarks>
-    private static Expr EvaluateWithCompletion(Model model, Expr? expr)
+    private static Expr EvaluateWithCompletion(Model model, Expr expr)
         => model.Eval(expr, completion: true);
 }

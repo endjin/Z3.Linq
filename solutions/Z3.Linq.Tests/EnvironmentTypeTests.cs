@@ -7,15 +7,19 @@ namespace Z3.Linq.Tests;
 /// <remarks>
 /// <para>
 /// Two code paths sit behind these. A compiler-generated type - an anonymous type - is created
-/// uninitialised and populated by writing to the compiler's backing fields, matched by name
-/// (Theorem.cs:610-651). Everything else is created with <c>Activator.CreateInstance</c> and
-/// populated through its properties and fields (Theorem.cs:653-699).
+/// uninitialised and populated by writing to the compiler's backing fields, matched by name.
+/// Everything else is created with <c>Activator.CreateInstance</c> and populated through its
+/// properties and fields.
 /// </para>
 /// <para>
-/// The split matters because the two support different types. The anonymous path handles only
-/// <c>bool</c> and <c>int</c> and throws on anything else, while the ordinary path handles the
-/// full set. A value tuple looks like an anonymous type in source but is an ordinary framework
-/// type, so it takes the second path and is not restricted.
+/// Since #75 the two share one marshaller, so an anonymous environment supports every type a
+/// named one does, nested objects included. Until then the anonymous path carried a marshaller
+/// of its own that handled <c>bool</c> and <c>int</c> only, and evaluated a property's handle
+/// before checking its type - so a nested object, whose handle is null, reached Z3 and came back
+/// as a bare <c>NullReferenceException</c>. The one shape still refused is a collection: the
+/// instance passed to <c>NewTheorem</c> is discarded, so nothing can pre-size it, and it is
+/// rejected by name. A value tuple looks like an anonymous type in source but is an ordinary
+/// framework type, so it takes the second path.
 /// </para>
 /// <para>
 /// Note that <c>Symbols&lt;T1, T2, T3, T4&gt;</c> does not exist - the family provides arities
@@ -104,32 +108,187 @@ public class EnvironmentTypeTests
     }
 
     /// <summary>
-    /// The anonymous-type path supports only <c>bool</c> and <c>int</c>.
+    /// An anonymous environment supports the types a named one does.
     /// </summary>
     /// <remarks>
-    /// Theorem.cs:647 throws for any other property type, so a double that is perfectly usable
-    /// in a named environment cannot be used in an anonymous one. This is a real restriction
-    /// rather than a defect - the branch never grew the other cases - but it is undocumented,
-    /// and the failure names the property rather than explaining the restriction.
+    /// This pinned a <see cref="NotSupportedException"/> until #75: the anonymous path had a
+    /// marshaller of its own that handled <c>bool</c> and <c>int</c> and refused everything
+    /// else, so a double that was perfectly usable in a named environment could not be used in
+    /// an anonymous one. It now goes through the same <c>ConvertZ3Expression</c> as every other
+    /// shape, and the restriction is gone with the code that imposed it.
     /// </remarks>
     [TestMethod]
-    public void Solve_AnonymousTypeWithDoubleProperty_ThrowsNotSupportedException()
+    public void Solve_AnonymousTypeWithDoubleProperty_PopulatesIt()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem(new { d = default(double) })
-            .Where(t => t.d == 1.5);
 
-        // Act & Assert
-        Should.Throw<NotSupportedException>(() => theorem.Solve());
+        // Act
+        var result = context.NewTheorem(new { d = default(double) })
+            .Where(t => t.d == 1.5)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.d.ShouldBe(1.5);
+    }
+
+    [TestMethod]
+    public void Solve_AnonymousTypeWithEveryScalarType_PopulatesEachOne()
+    {
+        // Arrange: one property of each type the sort mapping supports, in a single anonymous
+        // environment, so a regression to a marshaller that knows some of them would show up as
+        // a named failure rather than pass on the two it did handle.
+        using var context = new Z3Context();
+        DateTime instant = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        // Act
+        var result = context.NewTheorem(new
+            {
+                flag = default(bool),
+                n = default(int),
+                s = default(short),
+                l = default(long),
+                f = default(float),
+                d = default(double),
+                m = default(decimal),
+                text = default(string),
+                when = default(DateTime),
+            })
+            .Where(t => t.flag)
+            .Where(t => t.n == 1)
+            .Where(t => t.s == 2)
+            .Where(t => t.l == 9_000_000_000L)
+            .Where(t => t.f == 1.5f)
+            .Where(t => t.d == -2.25)
+            .Where(t => t.m == 0.1m)
+            .Where(t => t.text == "abc")
+            .Where(t => t.when == instant)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.flag.ShouldBeTrue();
+        result.n.ShouldBe(1);
+        result.s.ShouldBe((short)2);
+        result.l.ShouldBe(9_000_000_000L);
+        result.f.ShouldBe(1.5f);
+        result.d.ShouldBe(-2.25);
+        result.m.ShouldBe(0.1m);
+        result.text.ShouldBe("abc");
+        result.when.ShouldBe(instant);
+        result.when.Kind.ShouldBe(DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// The case in #75: an anonymous environment holding a nested object.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the issue's repro verbatim - the nested object is not even constrained - and it
+    /// threw a bare <see cref="NullReferenceException"/> from inside the native interop. A nested
+    /// environment has no handle of its own, only children, and the anonymous branch evaluated
+    /// the handle before looking at the type, so the null went straight to <c>Model.Eval</c>.
+    /// The three evaluation sites in <c>ConvertZ3Expression</c> guarded against exactly that;
+    /// this fourth one did not, and now no longer exists.
+    /// </para>
+    /// <para>
+    /// The inner values come from completion and are not asserted; that the inner object is
+    /// constructed at all is the point.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_AnonymousTypeWithAnUnconstrainedNestedObject_ConstructsIt()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new { inner = new InnerEnvironment(), n = default(int) })
+            .Where(t => t.n == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.inner.ShouldNotBeNull();
+        result.n.ShouldBe(1);
+    }
+
+    [TestMethod]
+    public void Solve_AnonymousTypeWithANestedObject_PopulatesTheNestedProperties()
+    {
+        // Arrange: the same shape with the inner symbols constrained through the anonymous root,
+        // which is what a caller would actually write. Translation already handled this - the
+        // solve completed before the marshalling failure - so the assertion is on the values.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new { inner = new InnerEnvironment(), n = default(int) })
+            .Where(t => t.inner.A == 5)
+            .Where(t => t.inner.B == t.n * 2)
+            .Where(t => t.n == 4)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.inner.A.ShouldBe(5);
+        result.inner.B.ShouldBe(8);
+        result.n.ShouldBe(4);
+    }
+
+    [TestMethod]
+    public void Solve_AnonymousTypeWithANestedAnonymousType_PopulatesIt()
+    {
+        // Arrange: an anonymous type inside an anonymous type. The recursion re-enters the same
+        // branch for the inner one, so both levels are written through backing fields.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem(new { inner = new { a = default(int) }, n = default(int) })
+            .Where(t => t.inner.a == 4)
+            .Where(t => t.n == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.inner.a.ShouldBe(4);
+        result.n.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// A collection in an anonymous environment is rejected by name.
+    /// </summary>
+    /// <remarks>
+    /// The one shape the shared marshaller cannot serve here. It reads the element count from
+    /// the collection already on the instance, and an anonymous instance is created uninitialised
+    /// - the one passed to <c>NewTheorem</c> is discarded - so there is nothing to read. Without
+    /// the guard this would be #78's <see cref="NullReferenceException"/> on the count; with it,
+    /// the message says which member and why. Pinned because dropping the guard passes every
+    /// other test in this file.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_AnonymousTypeWithACollectionProperty_ThrowsNotSupportedException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var theorem = context.NewTheorem(new { v = new int[2], n = default(int) })
+            .Where(t => t.v[0] == 3)
+            .Where(t => t.n == 1);
+
+        // Act
+        NotSupportedException exception = Should.Throw<NotSupportedException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldContain("v");
+        exception.Message.ShouldContain("pre-sized");
     }
 
     [TestMethod]
     public void Solve_ValueTupleWithDouble_PopulatesEveryField()
     {
-        // Arrange: the counterpart to the test above. A value tuple is written the same way in
-        // source but is an ordinary framework type exposing public fields, so it takes the
-        // non-anonymous path and the bool/int restriction does not apply.
+        // Arrange: a value tuple is written the same way in source as an anonymous type but is
+        // an ordinary framework type exposing public fields, so it takes the non-anonymous path.
+        // Kept beside the anonymous double case because until #75 the two behaved differently.
         using var context = new Z3Context();
 
         // Act
@@ -266,11 +425,12 @@ public class EnvironmentTypeTests
     /// An anonymous environment with an unconstrained property is still populated.
     /// </summary>
     /// <remarks>
-    /// The anonymous path writes to compiler-generated backing fields and evaluates the model
-    /// through its own call, separate from the one every other environment shape uses. So it
-    /// failed independently under #51 and it can regress independently: this is the only test
-    /// covering that call. Only <c>flag</c> is asserted - <c>n</c> is free and takes whatever
-    /// completion supplies.
+    /// The anonymous path writes to compiler-generated backing fields, and until #75 it also
+    /// evaluated the model through a call of its own, separate from the one every other shape
+    /// uses - so it failed independently under #51, and this was the only test covering that
+    /// call. It now marshals through <c>ConvertZ3Expression</c> like everything else; the test
+    /// stays because the backing-field write is still this branch's own. Only <c>flag</c> is
+    /// asserted - <c>n</c> is free and takes whatever completion supplies.
     /// </remarks>
     [TestMethod]
     public void Solve_AnonymousTypeWithAnUnconstrainedProperty_PopulatesTheConstrainedOne()
