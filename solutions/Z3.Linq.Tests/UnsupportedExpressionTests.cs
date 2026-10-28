@@ -50,7 +50,7 @@ public class UnsupportedExpressionTests
         // Arrange: only Z3Methods.Distinct, indexed property getters and methods carrying a
         // predicate rewriter attribute are understood. An ordinary method that depends on a
         // theorem symbol cannot be evaluated away, so it reaches the visitor and is rejected
-        // (ExpressionVisitor.cs:277).
+        // (ExpressionVisitor.cs:278).
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => Increment(t.X1) == 2);
@@ -64,7 +64,7 @@ public class UnsupportedExpressionTests
     {
         // Arrange: the Convert case handles conversions to double, int and char only. Widening
         // an int symbol to long is unremarkable C# but has no case, so it falls through to the
-        // catch-all (ExpressionVisitor.cs:140). Note this one is NotImplementedException rather
+        // catch-all (ExpressionVisitor.cs:141). Note this one is NotImplementedException rather
         // than NotSupportedException - the throw sites are not consistent about which they use.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
@@ -119,7 +119,7 @@ public class UnsupportedExpressionTests
     /// <remarks>
     /// An enum's TypeCode is that of its underlying type, so the symbol is created as an
     /// integer - and then C# emits a Convert to int for the comparison, which
-    /// ExpressionVisitor.cs:131 reads as a real-to-int conversion and casts to RealExpr. Same
+    /// ExpressionVisitor.cs:132 reads as a real-to-int conversion and casts to RealExpr. Same
     /// root cause as short, so the same fix covers both.
     /// This test pins current behaviour and must be updated when the defect is fixed.
     /// </remarks>

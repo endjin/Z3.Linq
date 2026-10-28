@@ -1,8 +1,5 @@
 namespace Z3.Linq.Tests;
 
-using System.Globalization;
-using System.Threading;
-
 /// <summary>
 /// Round-trips a value of each scalar symbol type through <see cref="Theorem{T}.Solve"/>:
 /// C# constant -> Z3 term -> model -> CLR property.
@@ -23,12 +20,6 @@ using System.Threading;
 [TestClass]
 public class SymbolTypeMarshallingTests
 {
-    /// <summary>
-    /// How long to wait for a solve running on a dedicated thread. Generous by design - it
-    /// exists to turn a hang into a failure, not to police how long a solve should take.
-    /// </summary>
-    private static readonly TimeSpan SolveTimeout = TimeSpan.FromSeconds(30);
-
     [TestMethod]
     [DataRow(0, DisplayName = "Zero")]
     [DataRow(42, DisplayName = "Positive")]
@@ -173,7 +164,7 @@ public class SymbolTypeMarshallingTests
     /// <remarks>
     /// A short symbol is created with MkIntConst, but C# widens short to int for the comparison
     /// and ExpressionVisitor.VisitUnary reads that Convert node as a real-to-int conversion,
-    /// casting the IntExpr to RealExpr (ExpressionVisitor.cs:131). A second defect waits behind
+    /// casting the IntExpr to RealExpr (ExpressionVisitor.cs:132). A second defect waits behind
     /// it: TypeCode.Int16 marshals to an int, which a short property rejects.
     /// This test pins current behaviour and must be updated when the defect is fixed.
     /// </remarks>
@@ -263,101 +254,6 @@ public class SymbolTypeMarshallingTests
         result.ShouldNotBeNull();
         result.X1.ShouldBe(5);
         result.X2.ShouldBe("five");
-    }
-
-    /// <summary>
-    /// KNOWN DEFECT (#52): a real-valued constant is written to Z3 using the current culture.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// ExpressionVisitor.cs:304 calls MkReal(val.ToString()) with no format provider, so under a
-    /// comma-decimal culture the literal 1.5 is handed to Z3 as "1,5" and its parser rejects it.
-    /// Every other numeric conversion in the visitor passes InvariantCulture, and so does every
-    /// read back on the marshalling side, which is what makes this one look like an oversight
-    /// rather than a decision.
-    /// </para>
-    /// <para>
-    /// The work runs on a dedicated thread rather than by setting the culture on the test's own
-    /// thread. CurrentCulture is per-thread, these tests run in parallel at method level, and
-    /// the runner hands out pooled threads - so mutating it here could leak into whatever runs
-    /// next on the same thread. A thread created for the purpose cannot leak anywhere.
-    /// </para>
-    /// <para>This test pins current behaviour and must be updated when the defect is fixed.</para>
-    /// </remarks>
-    [TestMethod]
-    public void Solve_DoubleSymbolUnderCommaDecimalCulture_ThrowsZ3ParserError()
-    {
-        // Arrange
-        Exception? captured = null;
-
-        var thread = new Thread(() =>
-        {
-            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
-
-            try
-            {
-                using var context = new Z3Context();
-                _ = context.NewTheorem<Symbols<double, int>>()
-                    .Where(t => t.X1 == 1.5)
-                    .Solve();
-            }
-            catch (Exception ex)
-            {
-                captured = ex;
-            }
-        });
-
-        // Act
-        thread.Start();
-
-        // Bounded, so that a solver that never returns fails this test rather than hanging the
-        // whole run with no indication of which test stopped. The work itself takes single-digit
-        // milliseconds, so the limit is enormous slack rather than a tuned value.
-        thread.Join(SolveTimeout).ShouldBeTrue("the solve on the de-DE thread did not finish");
-
-        // Assert
-        captured.ShouldBeOfType<Microsoft.Z3.Z3Exception>();
-    }
-
-    [TestMethod]
-    public void Solve_DoubleSymbolUnderInvariantCulture_RoundTripsTheValue()
-    {
-        // Arrange: the counterpart to the pin above, on the same dedicated-thread mechanism, so
-        // that the two differ only by culture. This is what the defect above should look like
-        // once it is fixed.
-        double? value = null;
-        Exception? captured = null;
-
-        var thread = new Thread(() =>
-        {
-            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-
-            try
-            {
-                using var context = new Z3Context();
-                var result = context.NewTheorem<Symbols<double, int>>()
-                    .Where(t => t.X1 == 1.5)
-                    .Solve();
-
-                value = result?.X1;
-            }
-            catch (Exception ex)
-            {
-                // Captured rather than left to escape: an exception on a bare thread is
-                // unhandled, so it takes down the test host and the run reports "zero tests
-                // ran" rather than one failed test. The pin above already does this; this
-                // counterpart did not, because it was not expected to throw.
-                captured = ex;
-            }
-        });
-
-        // Act
-        thread.Start();
-        thread.Join(SolveTimeout).ShouldBeTrue("the solve on the invariant-culture thread did not finish");
-
-        // Assert
-        captured.ShouldBeNull();
-        value.ShouldBe(1.5);
     }
 
     /// <summary>

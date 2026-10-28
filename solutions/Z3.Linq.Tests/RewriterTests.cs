@@ -117,7 +117,7 @@ public class RewriterTests
     {
         // Arrange: the visitor re-visits whatever the rewriter returns, so a rewriter returning
         // its own input would recurse forever. That is detected by reference equality and
-        // rejected (ExpressionVisitor.cs:191) - a guard worth keeping, since the alternative is
+        // rejected (ExpressionVisitor.cs:192) - a guard worth keeping, since the alternative is
         // a hung build rather than a failed one.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
@@ -131,7 +131,7 @@ public class RewriterTests
     public void Solve_PredicateRewriterTypeNotImplementingTheInterface_ThrowsInvalidOperationException()
     {
         // Arrange: as with the global rewriter, the attribute cannot enforce this at compile
-        // time (ExpressionVisitor.cs:179).
+        // time (ExpressionVisitor.cs:180).
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
             .Where(t => WrongRewriterType(t.X1, t.X2));
