@@ -196,6 +196,45 @@ var solveable = from t in ctx.NewTheorem<(int a, int b)>()
 if (solveable.TrySolve(out var cheapest)) { /* ... */ }
 ```
 
+### When Z3 cannot decide
+
+Some theorems cannot be decided. Nonlinear integer arithmetic is undecidable in general, and a
+theorem such as *three integers whose cubes sum to 42* leaves Z3 searching until the process is
+killed - the constraints look no more exotic than the ones above. Bound the solve with a
+`Timeout`, or with a `ResourceLimit`, which counts Z3's own units of work and so is reached at the
+same point on every machine:
+
+```csharp
+using (var ctx = new Z3Context { Timeout = TimeSpan.FromSeconds(5) })
+{
+    var theorem = from t in ctx.NewTheorem<Symbols<int, int, int>>()
+                  where (t.X1 * t.X1 * t.X1) + (t.X2 * t.X2 * t.X2) + (t.X3 * t.X3 * t.X3) == 42
+                  select t;
+
+    try
+    {
+        var result = theorem.Solve();
+    }
+    catch (TheoremUndecidedException e)
+    {
+        Console.WriteLine($"Z3 stopped: {e.Reason}");   // Z3 stopped: timeout
+    }
+}
+```
+
+Every solve and optimisation also takes a `CancellationToken`, which interrupts Z3 and throws
+`OperationCanceledException` as usual:
+
+```csharp
+using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+var result = theorem.Solve(cancellation.Token);
+```
+
+A theorem Z3 decides within the limit is unaffected, and `TrySolve` returning `false` still means
+exactly one thing: the theorem was proved to have no solution. A solve that stops without deciding
+throws, so it can never be mistaken for one.
+
 ## Getting Started
 
 You can install the [Z3.Linq NuGet Package](https://www.nuget.org/packages/Z3.Linq/).

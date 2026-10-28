@@ -27,14 +27,17 @@ public static class SolveableExtensions
     /// </summary>
     /// <typeparam name="TEnvironment">Value-type environment over which the theorem is defined.</typeparam>
     /// <param name="solveable">The theorem, or a deferred optimisation over one.</param>
+    /// <param name="cancellationToken">A token that interrupts the solve.</param>
     /// <returns>The solution, or <see langword="null"/> if the theorem cannot be satisfied.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="solveable"/> is null.</exception>
-    public static TEnvironment? SolveOrNull<TEnvironment>(this ISolveable<TEnvironment> solveable)
+    /// <exception cref="TheoremUndecidedException">Z3 stopped without deciding. See #85.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    public static TEnvironment? SolveOrNull<TEnvironment>(this ISolveable<TEnvironment> solveable, CancellationToken cancellationToken = default)
         where TEnvironment : struct
     {
         ArgumentNullException.ThrowIfNull(solveable);
 
-        return solveable.TrySolve(out TEnvironment solution) ? solution : null;
+        return solveable.TrySolve(out TEnvironment solution, cancellationToken) ? solution : null;
     }
 
     /// <summary>
@@ -46,16 +49,20 @@ public static class SolveableExtensions
     /// <param name="theorem">The theorem to optimize over.</param>
     /// <param name="direction">The optimization goal, i.e. whether to minimize or maximize the solution.</param>
     /// <param name="lambda">Expression representing the value to minimize or maximize.</param>
+    /// <param name="cancellationToken">A token that interrupts the optimisation.</param>
     /// <returns>The optimal solution, or <see langword="null"/> if the theorem cannot be satisfied.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="theorem"/> is null.</exception>
+    /// <exception cref="TheoremUndecidedException">Z3 stopped without deciding. See #85.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     public static TEnvironment? OptimizeOrNull<TEnvironment, TResult>(
         this Theorem<TEnvironment> theorem,
         Optimization direction,
-        Expression<Func<TEnvironment, TResult>> lambda)
+        Expression<Func<TEnvironment, TResult>> lambda,
+        CancellationToken cancellationToken = default)
         where TEnvironment : struct
     {
         ArgumentNullException.ThrowIfNull(theorem);
 
-        return theorem.TryOptimize(direction, lambda, out TEnvironment solution) ? solution : null;
+        return theorem.TryOptimize(direction, lambda, out TEnvironment solution, cancellationToken) ? solution : null;
     }
 }
