@@ -8,7 +8,7 @@
 // answer is a proof, and an answer is a concrete counterexample. The last table finds
 // multiplicative inverses, which divide exact multiples of a constant by multiplying.
 //
-// Adapted from "SAT/SMT by Example" (Dennis Yurichev), sections 3.7, 4.3, 4.4, 4.10, 4.11 and
+// Based on problems in "SAT/SMT by Example" (Dennis Yurichev), sections 3.7, 4.3, 4.4, 4.10, 4.11 and
 // 4.12, https://smt.st
 //
 //   dotnet run demos/bit-twiddling.cs

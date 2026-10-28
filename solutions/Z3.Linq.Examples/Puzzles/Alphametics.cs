@@ -5,7 +5,7 @@ namespace Z3.Linq.Examples.Puzzles;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ported from "SAT/SMT by Example" by Dennis Yurichev, section 8.10, https://smt.st.
+/// Based on a problem in "SAT/SMT by Example" by Dennis Yurichev, section 8.10, https://smt.st.
 /// </para>
 /// <para>
 /// Each letter is an integer symbol in the range 0-9, all letters are distinct, and the

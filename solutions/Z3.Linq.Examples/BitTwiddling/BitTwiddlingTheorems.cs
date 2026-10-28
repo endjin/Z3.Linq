@@ -6,7 +6,7 @@ namespace Z3.Linq.Examples.BitTwiddling;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Adapted from "SAT/SMT by Example" by Dennis Yurichev (sections 3.7, 4.3, 4.4, 4.10, 4.11 and
+/// Based on problems in "SAT/SMT by Example" by Dennis Yurichev (sections 3.7, 4.3, 4.4, 4.10, 4.11 and
 /// 4.12), https://smt.st.
 /// </para>
 /// <para>

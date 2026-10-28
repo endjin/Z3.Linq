@@ -16,7 +16,7 @@ using System.Linq.Expressions;
 /// a time slot).
 /// </para>
 /// <para>
-/// Adapted from "SAT/SMT by Example" by Dennis Yurichev, sections 9.1 and 9.2,
+/// Based on problems in "SAT/SMT by Example" by Dennis Yurichev, sections 9.1 and 9.2,
 /// https://smt.st.
 /// </para>
 /// </remarks>

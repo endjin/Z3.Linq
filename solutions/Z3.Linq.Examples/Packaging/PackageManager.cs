@@ -9,7 +9,7 @@ using System.Linq.Expressions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ported from the simple package manager in "SAT/SMT by Example" by Dennis Yurichev, section
+/// Based on the simple package manager problem in "SAT/SMT by Example" by Dennis Yurichev, section
 /// 22.5.1, https://smt.st. The catalogue (versions and dependencies) is the book's.
 /// </para>
 /// <para>

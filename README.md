@@ -8,13 +8,15 @@ Based on the proof of concept by [Bart De Smet](https://github.com/bartdesmet) w
 
 A number of examples are included as standalone [Spectre.Console](https://spectreconsole.net/) demos in [`demos/`](demos), each a single-file .NET app. Run the interactive launcher with `dotnet run demos/menu.cs`, or run any one directly, e.g. `dotnet run demos/sudoku.cs`; see the [demos README](demos/README.md) for the full list.
 
-### Ports from "SAT/SMT by Example"
+### Problems from "SAT/SMT by Example"
 
-Eleven demos port problems from Dennis Yurichev's [SAT/SMT by Example](https://smt.st) to Z3.Linq:
+Eleven demos solve problems from Dennis Yurichev's [SAT/SMT by Example](https://smt.st) with Z3.Linq:
 bit-twiddling proofs (XOR swap, Dietz's average, branchless abs/min/max, the zero-byte hack, modular inverse),
 SEND + MORE = MONEY, the Zebra puzzle, N queens, the assignment problem, Kantorovich's wood-workshop cutting
 problem, two small knapsacks (popsicles and XKCD 287), package dependency resolution, map colouring and
 committee scheduling, job-shop scheduling, and Killer and Greater-Than Sudoku. Each demo cites its section of the book.
+The book is published under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the demos reuse only the
+problems' data (prices, clues, constraints) and their code and text are written for this repository.
 
 ### Problem - Proving a Bit-Twiddling Trick
 

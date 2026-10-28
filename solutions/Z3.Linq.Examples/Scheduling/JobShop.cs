@@ -19,7 +19,7 @@ using System.Linq;
 /// by it.
 /// </para>
 /// <para>
-/// Adapted from "SAT/SMT by Example" by Dennis Yurichev, section 22.8, https://smt.st. The
+/// Based on a problem in "SAT/SMT by Example" by Dennis Yurichev, section 22.8, https://smt.st. The
 /// instance in <see cref="ThreeJobs"/> is the book's small example; the shortest schedule for it
 /// takes 11 time units.
 /// </para>

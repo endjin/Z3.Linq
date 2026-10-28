@@ -5,7 +5,7 @@ namespace Z3.Linq.Examples.Puzzles;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ported from "SAT/SMT by Example" by Dennis Yurichev, section 8.4, https://smt.st.
+/// Based on a problem in "SAT/SMT by Example" by Dennis Yurichev, section 8.4, https://smt.st.
 /// </para>
 /// <para>
 /// Each row holds exactly one queen, so the board is one integer per row: the column of that

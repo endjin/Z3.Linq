@@ -9,7 +9,7 @@ using System.Reflection;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ported from "SAT/SMT by Example" by Dennis Yurichev, section 8.2.1, https://smt.st. The clues
+/// Based on a problem in "SAT/SMT by Example" by Dennis Yurichev, section 8.2.1, https://smt.st. The clues
 /// are the ones published in Life International in 1962.
 /// </para>
 /// <para>

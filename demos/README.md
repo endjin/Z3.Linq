@@ -27,8 +27,10 @@ your local source.
 
 ## The demos
 
-Eleven of the demos port problems from Dennis Yurichev's free book
-[SAT/SMT by Example](https://smt.st); each file names the section it comes from.
+Eleven of the demos solve problems from Dennis Yurichev's free book
+[SAT/SMT by Example](https://smt.st); each file names the section it comes from. The book is
+published under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); only the problems'
+data is reused, and the code and text are written for this repository.
 
 | File | Problem |
 |------|---------|

@@ -21,8 +21,8 @@ using System.Linq.Expressions;
 /// cells.
 /// </para>
 /// <para>
-/// The variants follow "SAT/SMT by Example" by Dennis Yurichev, sections 8.1.3 (Greater Than
-/// Sudoku) and 8.1.4 (Killer Sudoku), https://smt.st.
+/// The variants are the ones described in "SAT/SMT by Example" by Dennis Yurichev, sections
+/// 8.1.3 (Greater Than Sudoku) and 8.1.4 (Killer Sudoku), https://smt.st.
 /// </para>
 /// </remarks>
 public static class SudokuGridTheorem
