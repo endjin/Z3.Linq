@@ -356,3 +356,6 @@ _codeCoverage/
 _packages/
 *.sbom.*
 .zf/extensions/
+
+# Microsoft.Z3 packages downloaded by scripts/Install-Z3Package.ps1
+_z3-feed/*.nupkg

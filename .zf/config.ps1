@@ -29,6 +29,12 @@ $SkipTestReport = $true
 $SkipAnalysis = $false
 $SkipPackage = $false
 
+# Releases are ON HOLD. The build uses Microsoft.Z3 5.1.0 for its Linux and arm64 native
+# binaries, but that version is not on nuget.org, so a published Z3.Linq would declare a
+# dependency no consumer can restore (NU1102). Lift this once Microsoft.Z3 5.x is published -
+# see https://github.com/endjin/Z3.Linq/issues/60 and https://github.com/Z3Prover/z3/issues/10711
+$SkipPublish = $true
+
 #
 # Build process configuration
 #
@@ -49,7 +55,7 @@ task . FullBuild
 # task PostInit {}
 # task PreVersion {}
 # task PostVersion {}
-# task PreBuild {}
+task PreBuild EnsureZ3Package
 # task PostBuild {}
 # task PreTest {}
 # task PostTest {}
@@ -62,3 +68,12 @@ task . FullBuild
 # task PrePublish {}
 # task PostPublish {}
 # task RunLast {}
+
+#
+# Microsoft.Z3 is not available on nuget.org (see scripts/Install-Z3Package.ps1), so the
+# package has to be in the local folder feed before anything restores. PreBuild is the last
+# extensibility point that runs ahead of the RestorePackages task.
+#
+task EnsureZ3Package {
+    & (Join-Path $here "scripts/Install-Z3Package.ps1")
+}
