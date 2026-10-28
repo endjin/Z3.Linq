@@ -471,10 +471,9 @@ public class Theorem
                             numVal = float.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
                             break;
                         case TypeCode.Decimal:
-                            Expr val = EvaluateWithCompletion(model, subEnv.Expr ?? throw new ArgumentException(
-                    $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
-                    nameof(subEnv)));
-                            string numValue = ((RatNum)val).ToDecimalString(128);
+                            // Read the element the loop selected, not the array constant it was
+                            // selected from - every other arm here uses numValExpr. See #55.
+                            string numValue = ((RatNum)numValExpr).ToDecimalString(128);
 
                             ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
                             if (numValue.EndsWith('?'))
