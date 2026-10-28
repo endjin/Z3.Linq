@@ -30,7 +30,7 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// solution's. See #78.
     /// </param>
     internal Theorem(Z3Context context, T template)
-        : base(context, new List<LambdaExpression>(), template)
+        : base(context, [], template)
     {
     }
 
@@ -177,7 +177,7 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// <returns>Theorem with the new constraint applied.</returns>
     public Theorem<T> Where(Expression<Func<T, bool>> constraint)
     {
-        return new Theorem<T>(base.Context, base.Constraints.Concat(new List<LambdaExpression> { constraint }), base.Template);
+        return new Theorem<T>(base.Context, base.Constraints.Concat([constraint]), base.Template);
     }
 
     /// <summary>

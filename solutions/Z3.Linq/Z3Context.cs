@@ -55,7 +55,7 @@ public sealed class Z3Context : IDisposable
     /// </exception>
     public TimeSpan? Timeout
     {
-        get => this.timeout;
+        get => field;
         set
         {
             if (value is { } t && (t <= TimeSpan.Zero || t.TotalMilliseconds > uint.MaxValue))
@@ -63,7 +63,7 @@ public sealed class Z3Context : IDisposable
                 throw new ArgumentOutOfRangeException(nameof(value), value, "The timeout must be positive and no more than uint.MaxValue milliseconds.");
             }
 
-            this.timeout = value;
+            field = value;
         }
     }
 
@@ -80,7 +80,7 @@ public sealed class Z3Context : IDisposable
     /// <exception cref="ArgumentOutOfRangeException">The value is zero.</exception>
     public uint? ResourceLimit
     {
-        get => this.resourceLimit;
+        get => field;
         set
         {
             if (value is 0)
@@ -88,13 +88,9 @@ public sealed class Z3Context : IDisposable
                 throw new ArgumentOutOfRangeException(nameof(value), value, "The resource limit must be positive.");
             }
 
-            this.resourceLimit = value;
+            field = value;
         }
     }
-
-    private TimeSpan? timeout;
-
-    private uint? resourceLimit;
 
     /// <summary>
     /// Closes the native resources held by the Z3 theorem prover.
@@ -170,14 +166,14 @@ public sealed class Z3Context : IDisposable
     /// </remarks>
     internal Params? CreateLimits(Context context)
     {
-        if (this.timeout is null && this.resourceLimit is null)
+        if (this.Timeout is null && this.ResourceLimit is null)
         {
             return null;
         }
 
         Params limits = context.MkParams();
 
-        if (this.timeout is { } t)
+        if (this.Timeout is { } t)
         {
             // Round up, not truncate: Z3's timeout is in whole milliseconds, and a positive
             // TimeSpan below one millisecond truncates to 0, which Z3 reads as "no timeout" - so
@@ -187,7 +183,7 @@ public sealed class Z3Context : IDisposable
             limits.Add("timeout", (uint)Math.Ceiling(t.TotalMilliseconds));
         }
 
-        if (this.resourceLimit is { } r)
+        if (this.ResourceLimit is { } r)
         {
             limits.Add("rlimit", r);
         }
@@ -201,9 +197,6 @@ public sealed class Z3Context : IDisposable
     /// <param name="s">Log output string.</param>
     internal void LogWriteLine(string s)
     {
-        if (Log != null)
-        {
-            Log.WriteLine(s);
-        }
+        Log?.WriteLine(s);
     }
 }
