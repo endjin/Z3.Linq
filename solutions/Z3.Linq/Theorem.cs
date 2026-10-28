@@ -320,20 +320,32 @@ public class Theorem
         {
             BoolExpr expression = (BoolExpr)ExpressionVisitor.Translate(context, environment, constraint.Body, constraint.Parameters[0]);
 
-            switch (approach)
-            {
-                case Solver solver:
-                    solver.Assert(expression);
-                    break;
-                case Optimize optimize:
-                    optimize.Assert(expression);
-                    break;
-            }
+            Assert(approach, expression);
 
             this.context.LogWriteLine(expression.ToString());
         }
 
         AssertBounds(context, approach, environment);
+    }
+
+    /// <summary>
+    /// Asserts a Boolean term into the <see cref="Solver"/> or <see cref="Optimize"/> the theorem
+    /// is being checked with - the one dispatch on the two forms a <see cref="Z3Object"/> approach
+    /// can take.
+    /// </summary>
+    /// <param name="approach">The <see cref="Solver"/> or <see cref="Optimize"/> to assert into.</param>
+    /// <param name="expression">The Boolean term to assert.</param>
+    private static void Assert(Z3Object approach, BoolExpr expression)
+    {
+        switch (approach)
+        {
+            case Solver solver:
+                solver.Assert(expression);
+                break;
+            case Optimize optimize:
+                optimize.Assert(expression);
+                break;
+        }
     }
 
     /// <summary>
@@ -373,15 +385,7 @@ public class Theorem
                     context.MkGe(symbol, context.MkInt(low)),
                     context.MkLe(symbol, context.MkInt(high)));
 
-                switch (approach)
-                {
-                    case Solver solver:
-                        solver.Assert(bounds);
-                        break;
-                    case Optimize optimize:
-                        optimize.Assert(bounds);
-                        break;
-                }
+                Assert(approach, bounds);
             }
 
             AssertBounds(context, approach, child);
