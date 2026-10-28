@@ -39,6 +39,33 @@ public class GraphColouringTests
     }
 
     [TestMethod]
+    [DataRow("Belgium", "France", true, DisplayName = "Belgium borders France")]
+    [DataRow("Belgium", "Germany", true, DisplayName = "Belgium borders Germany")]
+    [DataRow("Belgium", "Luxembourg", true, DisplayName = "Belgium borders Luxembourg")]
+    [DataRow("France", "Germany", true, DisplayName = "France borders Germany")]
+    [DataRow("France", "Luxembourg", true, DisplayName = "France borders Luxembourg")]
+    [DataRow("Germany", "Luxembourg", true, DisplayName = "Germany borders Luxembourg")]
+    [DataRow("Spain", "Portugal", true, DisplayName = "Spain borders Portugal")]
+    [DataRow("France", "Netherlands", false, DisplayName = "France does not border the Netherlands")]
+    [DataRow("Italy", "Germany", false, DisplayName = "Italy does not border Germany")]
+    [DataRow("Ireland", "France", false, DisplayName = "Ireland does not border France")]
+    public void Europe_BorderData_JoinsTheRightCountries(string first, string second, bool expected)
+    {
+        // Arrange: the counts alone would not notice a neighbour swapped on both sides. The first
+        // six rows are the four mutual neighbours that make three colours impossible.
+        int a = Array.IndexOf(Europe.Countries, first);
+        int b = Array.IndexOf(Europe.Countries, second);
+
+        // Act
+        bool joined = Europe.Edges.Contains((Math.Min(a, b), Math.Max(a, b)));
+
+        // Assert
+        a.ShouldBeGreaterThanOrEqualTo(0, first);
+        b.ShouldBeGreaterThanOrEqualTo(0, second);
+        joined.ShouldBe(expected);
+    }
+
+    [TestMethod]
     public void Solve_EuropeOrderedByColours_NeedsFourColours()
     {
         // Arrange

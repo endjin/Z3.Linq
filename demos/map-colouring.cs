@@ -80,10 +80,10 @@ AnsiConsole.WriteLine();
 // The same model, reused: committee meetings, where a colour is an hour.
 AnsiConsole.Write(new Rule("[springgreen2]Committee scheduling[/]").LeftJustified());
 AnsiConsole.Write(new Panel(
-    "Six committees each meet for an hour. Two committees with a member in common\n" +
-    "cannot meet in the same hour. Each committee is a vertex, two committees that\n" +
-    "share a member are joined by an edge, and each colour is an hour - so the\n" +
-    "fewest colours give the shortest timetable.")
+    "Six committees each meet for an hour. Two committees with a member in\n" +
+    "common cannot meet in the same hour. Each committee is a vertex, two\n" +
+    "committees that share a member are joined by an edge, and each colour is\n" +
+    "an hour - so the fewest colours give the shortest timetable.")
     .Header("[white]The problem[/]").Border(BoxBorder.Rounded).BorderColor(Color.Grey));
 AnsiConsole.WriteLine();
 

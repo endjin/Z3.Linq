@@ -6,7 +6,8 @@
 // Spectre.Console. In Killer Sudoku the grid is split into cages whose digits must differ and
 // add up to the cage's sum. In Greater-Than Sudoku a sign between neighbouring cells says which
 // one is bigger. SudokuGridTheorem supplies the ordinary rules over a grid of 81 uint cells -
-// bit-vectors to Z3, which is what makes these solve in about a second rather than minutes -
+// bit-vectors to Z3, which is what makes these solve in about a second rather than about a
+// minute (Greater-Than) or several (Killer) over int cells -
 // and WithCages / WithGreaterThan add each variant's clues.
 //
 // Both puzzles come from "SAT/SMT by Example" (Dennis Yurichev), sections 8.1.4 and 8.1.3,

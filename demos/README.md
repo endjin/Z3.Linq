@@ -49,7 +49,7 @@ Eleven of the demos port problems from Dennis Yurichev's free book
 | [`package-manager.cs`](package-manager.cs) | Dependency resolution: install only the libraries two programs need, at their newest compatible versions, and see a conflict reported as unsatisfiable. |
 | [`map-colouring.cs`](map-colouring.cs) | Four-colouring the map of Europe (and proving three colours are not enough), then scheduling committees as graph colouring. |
 | [`job-shop.cs`](job-shop.cs) | Job-shop scheduling: three jobs on three machines, `orderby` minimising the makespan, rendered as a Gantt chart. |
-| [`sudoku-variants.cs`](sudoku-variants.cs) | Killer Sudoku (cage sums) and Greater-Than Sudoku on a bit-vector grid, which Z3 solves in about a second where integers take minutes. |
+| [`sudoku-variants.cs`](sudoku-variants.cs) | Killer Sudoku (cage sums) and Greater-Than Sudoku on a bit-vector grid, which Z3 solves in about a second where integer cells took about a minute (Greater-Than) to several (Killer). |
 
 ## Running everything
 

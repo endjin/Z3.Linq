@@ -19,7 +19,7 @@ using Z3.Linq.Examples.Sudoku;
 /// The Killer puzzle is pinned cell by cell because it is unique, and one test proves that:
 /// excluding the solution makes the theorem unsatisfiable. The Greater-Than signs in the book
 /// do not determine a single grid - its printed answer is one of several, and the grid Z3 finds
-/// differs from it in 27 cells - so that puzzle is asserted by invariant only: every inequality
+/// can differ from it in many cells - so that puzzle is asserted by invariant only: every inequality
 /// holds and the grid is well formed. Pinning the grid Z3 happens to find would pin this
 /// version of Z3, not the puzzle.
 /// </para>
@@ -167,6 +167,31 @@ public class SudokuGridTheoremTests
         // Assert
         result.ShouldNotBeNull();
         AssertGridIs(result, GreaterThanSudokuPuzzles.BookSolution);
+    }
+
+    [TestMethod]
+    public void GreaterThanBookPuzzle_Data_HasFortyEightDistinctSigns()
+    {
+        // A data check that the solve tests cannot make: a dropped sign would leave every grid
+        // test green. The book's script has 49 sign lines, one of them repeated.
+        var signs = GreaterThanSudokuPuzzles.BookPuzzle;
+
+        signs.Length.ShouldBe(48);
+        signs.Distinct().Count().ShouldBe(48);
+    }
+
+    [TestMethod]
+    public void KillerSuperTough_Data_HasTwentyFiveCagesCoveringSeventySevenCells()
+    {
+        // A data check: 25 cages over 77 distinct cells, summing to 384. The book leaves out a
+        // 26th cage of four cells summing to 21, which brings the grid's total to 405.
+        var cages = KillerSudokuPuzzles.SuperTough;
+        var cells = cages.SelectMany(cage => cage.Cells).ToArray();
+
+        cages.Length.ShouldBe(25);
+        cells.Length.ShouldBe(77);
+        cells.Distinct().Count().ShouldBe(77);
+        cages.Sum(cage => cage.Sum).ShouldBe(384);
     }
 
     [TestMethod]
