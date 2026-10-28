@@ -334,8 +334,9 @@ public class SymbolTypeMarshallingTests
         // Arrange
         using var context = new Z3Context();
 
-        // Act: the second constraint is what makes the truncation observable. Z3.s real-to-int
-        // is a floor, so together these ask for a real in (3.5, 4). Pass the operand through
+        // Act: the second constraint is what makes the truncation observable. For a positive real
+        // the truncation is a floor, so together these ask for a real in (3.5, 4). Negative
+        // operands are covered by NumericConversionTests.Solve_DoubleSymbolCastToInt_TruncatesTowardZero. Pass the operand through
         // unconverted and they read as X1 == 3 and X1 > 3.5, which has no solution at all - so
         // this fails by returning null rather than by returning a wrong number.
         var result = context.NewTheorem<Symbols<double, int>>()
