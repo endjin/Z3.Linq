@@ -83,12 +83,14 @@ public class UnsupportedExpressionTests
     }
 
     [TestMethod]
-    public void Solve_UnsignedIntProperty_ThrowsNotSupportedException()
+    public void Solve_ByteProperty_ThrowsNotSupportedException()
     {
-        // Arrange: uint is likewise absent. Z3 integers are unbounded, so the omission is about
-        // the type switch rather than anything Z3 cannot represent.
+        // Arrange: byte and ushort are deliberately not mapped, even though uint and ulong are
+        // bit-vectors - because C# promotes byte and ushort to int in every expression, so such a
+        // symbol could never keep a bit-vector sort through a constraint. See the bit-vector work
+        // and BitVectorSymbolTests.
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<UnsignedEnvironment>().Where(t => t.Other == 1);
+        var theorem = context.NewTheorem<ByteEnvironment>().Where(t => t.Other == 1);
 
         // Act & Assert
         Should.Throw<NotSupportedException>(() => theorem.Solve());
@@ -117,8 +119,8 @@ public class UnsupportedExpressionTests
     /// An enum is only ever as supported as its underlying type. #63 fixed the <c>int</c>-backed
     /// case - <see cref="DayOfWeek"/> and friends - which is now round-tripped in
     /// <c>SymbolTypeMarshallingTests</c>. A <c>byte</c>-backed enum is <c>TypeCode.Byte</c>,
-    /// which the sort mapping has never handled, so it stops at the same guard that rejects a
-    /// bare <c>byte</c> or <c>uint</c>.
+    /// which the sort mapping does not handle, so it stops at the same guard that rejects a
+    /// bare <c>byte</c> or <c>ushort</c>.
     /// </para>
     /// <para>
     /// This is the outcome #63 asked for where a type genuinely is not supported: a
@@ -180,9 +182,9 @@ public class UnsupportedExpressionTests
         public int Other { get; set; }
     }
 
-    private sealed class UnsignedEnvironment
+    private sealed class ByteEnvironment
     {
-        public uint Value { get; set; }
+        public byte Value { get; set; }
 
         public int Other { get; set; }
     }

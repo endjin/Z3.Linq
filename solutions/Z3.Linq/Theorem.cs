@@ -451,6 +451,32 @@ public class Theorem
             TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64 or TypeCode.DateTime => context.IntSort,
             TypeCode.Boolean => context.BoolSort,
             TypeCode.Single or TypeCode.Decimal or TypeCode.Double => context.RealSort,
+            TypeCode.UInt32 or TypeCode.UInt64 => context.MkBitVecSort(BitVectorWidth(typeCode)!.Value),
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The width, in bits, of the Z3 bit-vector a fixed-width unsigned CLR type maps to, or
+    /// <see langword="null"/> for a type that is not a bit-vector.
+    /// </summary>
+    /// <param name="typeCode">The type code of the CLR type.</param>
+    /// <returns>The bit width, or <see langword="null"/>.</returns>
+    /// <remarks>
+    /// <c>uint</c> and <c>ulong</c> travel through Z3 as bit-vectors of their width - so they
+    /// carry wrapping arithmetic, bitwise operators and shifts, which a mathematical integer has
+    /// no counterpart for. <c>short</c>, <c>int</c> and <c>long</c> stay unbounded integers.
+    /// <c>byte</c> and <c>ushort</c> are deliberately not mapped: C# promotes them to <c>int</c>
+    /// in every expression, so a <c>byte</c> symbol could never keep its bit-vector sort through
+    /// a constraint, and mapping it would only produce a confusing conversion error rather than a
+    /// usable symbol.
+    /// </remarks>
+    internal static uint? BitVectorWidth(TypeCode typeCode)
+    {
+        return typeCode switch
+        {
+            TypeCode.UInt32 => 32,
+            TypeCode.UInt64 => 64,
             _ => null,
         };
     }
@@ -664,6 +690,12 @@ public class Theorem
                         case TypeCode.Int64:
                             numVal = ((IntNum)numValExpr).Int64;
                             break;
+                        case TypeCode.UInt32:
+                            numVal = (uint)((BitVecNum)numValExpr).UInt64;
+                            break;
+                        case TypeCode.UInt64:
+                            numVal = ((BitVecNum)numValExpr).UInt64;
+                            break;
                         case TypeCode.DateTime:
                             // Ticks on the UTC timeline, for the reason given on the scalar arm below.
                             numVal = ToDateTime(((IntNum)numValExpr).Int64, parameter.Name);
@@ -730,6 +762,12 @@ public class Theorem
                     break;
                 case TypeCode.Int64:
                     value = ((IntNum)val).Int64;
+                    break;
+                case TypeCode.UInt32:
+                    value = (uint)((BitVecNum)val).UInt64;
+                    break;
+                case TypeCode.UInt64:
+                    value = ((BitVecNum)val).UInt64;
                     break;
                 case TypeCode.DateTime:
                     // The write path encodes the instant as its ticks on the UTC timeline

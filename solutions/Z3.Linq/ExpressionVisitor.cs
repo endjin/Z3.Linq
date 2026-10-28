@@ -66,17 +66,25 @@ internal sealed class ExpressionVisitor
         {
             case ExpressionType.And:
             case ExpressionType.AndAlso:
-                return VisitLogical((BinaryExpression)expression, "&", static (ctx, a, b) => ctx.MkAnd(a, b));
+                return VisitBitwise((BinaryExpression)expression, "&", static (ctx, a, b) => ctx.MkAnd(a, b), static (ctx, a, b) => ctx.MkBVAND(a, b));
 
             case ExpressionType.Or:
             case ExpressionType.OrElse:
-                return VisitLogical((BinaryExpression)expression, "|", static (ctx, a, b) => ctx.MkOr(a, b));
+                return VisitBitwise((BinaryExpression)expression, "|", static (ctx, a, b) => ctx.MkOr(a, b), static (ctx, a, b) => ctx.MkBVOR(a, b));
 
             case ExpressionType.ExclusiveOr:
-                return VisitLogical((BinaryExpression)expression, "^", static (ctx, a, b) => ctx.MkXor(a, b));
+                return VisitBitwise((BinaryExpression)expression, "^", static (ctx, a, b) => ctx.MkXor(a, b), static (ctx, a, b) => ctx.MkBVXOR(a, b));
 
+            // C# spells both boolean '!' and bitwise '~' with the Not node (OnesComplement is the
+            // alternative spelling some providers emit for '~'); the operand's sort decides.
             case ExpressionType.Not:
-                return VisitUnary((UnaryExpression)expression, static (ctx, a) => ctx.MkNot((BoolExpr)a));
+            case ExpressionType.OnesComplement:
+                return VisitUnary((UnaryExpression)expression, static (ctx, a) => a switch
+                {
+                    BoolExpr boolExpr => ctx.MkNot(boolExpr),
+                    BitVecExpr bvExpr => ctx.MkBVNot(bvExpr),
+                    _ => throw new NotSupportedException("The '~' operator is supported only on bit-vector (uint/ulong) symbols; '!' only on Boolean operands."),
+                });
 
             case ExpressionType.Negate:
             case ExpressionType.NegateChecked:
@@ -84,36 +92,44 @@ internal sealed class ExpressionVisitor
 
             case ExpressionType.Add:
             case ExpressionType.AddChecked:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkAdd((ArithExpr)a, (ArithExpr)b));
+                return VisitArithmetic((BinaryExpression)expression, static (ctx, a, b) => ctx.MkAdd(a, b), static (ctx, a, b) => ctx.MkBVAdd(a, b));
 
             case ExpressionType.Subtract:
             case ExpressionType.SubtractChecked:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkSub((ArithExpr)a, (ArithExpr)b));
+                return VisitArithmetic((BinaryExpression)expression, static (ctx, a, b) => ctx.MkSub(a, b), static (ctx, a, b) => ctx.MkBVSub(a, b));
 
             case ExpressionType.Multiply:
             case ExpressionType.MultiplyChecked:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkMul((ArithExpr)a, (ArithExpr)b));
+                return VisitArithmetic((BinaryExpression)expression, static (ctx, a, b) => ctx.MkMul(a, b), static (ctx, a, b) => ctx.MkBVMul(a, b));
 
             case ExpressionType.Divide:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkDiv((ArithExpr)a, (ArithExpr)b));
+                return VisitArithmetic((BinaryExpression)expression, static (ctx, a, b) => ctx.MkDiv(a, b), static (ctx, a, b) => ctx.MkBVUDiv(a, b));
 
             case ExpressionType.Modulo:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) =>
-                    a is IntExpr ia && b is IntExpr ib
-                        ? ctx.MkRem(ia, ib)
-                        : throw new NotSupportedException("The modulo operator is supported only on integer operands; Z3 has no remainder on real-sorted values."));
+                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => (a, b) switch
+                {
+                    (BitVecExpr ba, BitVecExpr bb) => ctx.MkBVURem(ba, bb),
+                    (IntExpr ia, IntExpr ib) => ctx.MkRem(ia, ib),
+                    _ => throw new NotSupportedException("The modulo operator is supported only on integer or bit-vector operands; Z3 has no remainder on real-sorted values."),
+                });
+
+            case ExpressionType.LeftShift:
+                return VisitShift((BinaryExpression)expression, "<<", static (ctx, a, b) => ctx.MkBVSHL(a, b));
+
+            case ExpressionType.RightShift:
+                return VisitShift((BinaryExpression)expression, ">>", static (ctx, a, b) => ctx.MkBVLSHR(a, b));
 
             case ExpressionType.LessThan:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkLt((ArithExpr)a, (ArithExpr)b));
+                return VisitComparison((BinaryExpression)expression, static (ctx, a, b) => ctx.MkLt(a, b), static (ctx, a, b) => ctx.MkBVULT(a, b));
 
             case ExpressionType.LessThanOrEqual:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkLe((ArithExpr)a, (ArithExpr)b));
+                return VisitComparison((BinaryExpression)expression, static (ctx, a, b) => ctx.MkLe(a, b), static (ctx, a, b) => ctx.MkBVULE(a, b));
 
             case ExpressionType.GreaterThan:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkGt((ArithExpr)a, (ArithExpr)b));
+                return VisitComparison((BinaryExpression)expression, static (ctx, a, b) => ctx.MkGt(a, b), static (ctx, a, b) => ctx.MkBVUGT(a, b));
 
             case ExpressionType.GreaterThanOrEqual:
-                return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkGe((ArithExpr)a, (ArithExpr)b));
+                return VisitComparison((BinaryExpression)expression, static (ctx, a, b) => ctx.MkGe(a, b), static (ctx, a, b) => ctx.MkBVUGE(a, b));
 
             case ExpressionType.Equal:
                 return VisitBinary((BinaryExpression)expression, static (ctx, a, b) => ctx.MkEq(a, b));
@@ -207,32 +223,107 @@ internal sealed class ExpressionVisitor
     }
 
     /// <summary>
-    /// Translates <c>&amp;</c>, <c>|</c> and <c>^</c>, which C# uses for both Boolean logic and
-    /// integer bitwise arithmetic.
+    /// Translates an arithmetic operator, choosing the integer/real form or the bit-vector form
+    /// from the operands' sort.
     /// </summary>
     /// <param name="expression">Binary expression.</param>
-    /// <param name="op">The C# operator, for the diagnostic when the operands are not Boolean.</param>
-    /// <param name="build">Builds the Z3 term from two Boolean operands.</param>
+    /// <param name="arith">Builds the term for integer- or real-sorted operands.</param>
+    /// <param name="bv">Builds the term for bit-vector operands.</param>
     /// <returns>Z3 expression handle.</returns>
     /// <remarks>
-    /// The operator is chosen from the operands' Z3 sort, not from the expression node, because
-    /// the node is the same for <c>bool &amp; bool</c> and <c>int &amp; int</c>. Boolean operands
-    /// give the logical operator; anything else is a bitwise operation, which Z3's integer sort
-    /// has no counterpart for, so it is rejected with a message that says so rather than an
-    /// <see cref="InvalidCastException"/> from inside the cast.
+    /// A bit-vector symbol (an unsigned CLR type) carries wrapping arithmetic; an <c>int</c>,
+    /// <c>long</c> or real symbol carries mathematical arithmetic. Both operands share a sort,
+    /// since C# would not compile a mixed expression without a conversion, which
+    /// <see cref="VisitConvert"/> handles first.
     /// </remarks>
-    private Expr VisitLogical(BinaryExpression expression, string op, Func<Context, BoolExpr, BoolExpr, BoolExpr> build)
+    private Expr VisitArithmetic(BinaryExpression expression, Func<Context, ArithExpr, ArithExpr, ArithExpr> arith, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bv)
     {
         Expr left = Visit(expression.Left);
         Expr right = Visit(expression.Right);
 
-        if (left is BoolExpr boolLeft && right is BoolExpr boolRight)
+        return left is BitVecExpr bvLeft
+            ? bv(this.context, bvLeft, (BitVecExpr)right)
+            : arith(this.context, (ArithExpr)left, (ArithExpr)right);
+    }
+
+    /// <summary>
+    /// Translates a relational operator, choosing the ordered-arithmetic form or the
+    /// <em>unsigned</em> bit-vector form from the operands' sort.
+    /// </summary>
+    /// <param name="expression">Binary expression.</param>
+    /// <param name="arith">Builds the comparison for integer- or real-sorted operands.</param>
+    /// <param name="bv">Builds the unsigned comparison for bit-vector operands.</param>
+    /// <returns>Z3 expression handle.</returns>
+    /// <remarks>
+    /// Bit-vectors map from the unsigned CLR types, so the comparison is unsigned - <c>uint</c>
+    /// order, not two's-complement signed order.
+    /// </remarks>
+    private Expr VisitComparison(BinaryExpression expression, Func<Context, ArithExpr, ArithExpr, BoolExpr> arith, Func<Context, BitVecExpr, BitVecExpr, BoolExpr> bv)
+    {
+        Expr left = Visit(expression.Left);
+        Expr right = Visit(expression.Right);
+
+        return left is BitVecExpr bvLeft
+            ? bv(this.context, bvLeft, (BitVecExpr)right)
+            : arith(this.context, (ArithExpr)left, (ArithExpr)right);
+    }
+
+    /// <summary>
+    /// Translates <c>&amp;</c>, <c>|</c> and <c>^</c>, which C# uses for Boolean logic, integer
+    /// bitwise arithmetic, and bit-vector bitwise arithmetic alike.
+    /// </summary>
+    /// <param name="expression">Binary expression.</param>
+    /// <param name="op">The C# operator, for the diagnostic when the operands fit neither form.</param>
+    /// <param name="boolOp">Builds the logical term for Boolean operands.</param>
+    /// <param name="bvOp">Builds the bitwise term for bit-vector operands.</param>
+    /// <returns>Z3 expression handle.</returns>
+    /// <remarks>
+    /// The operator is chosen from the operands' Z3 sort, not the expression node, which is the
+    /// same for <c>bool &amp; bool</c>, <c>int &amp; int</c> and <c>uint &amp; uint</c>. Boolean
+    /// operands give the logical operator and bit-vector operands the bitwise one. A plain
+    /// integer symbol has neither - Z3's integer sort has no bitwise operations - so it is
+    /// rejected with a message pointing at the unsigned types, rather than an
+    /// <see cref="InvalidCastException"/> from inside the cast.
+    /// </remarks>
+    private Expr VisitBitwise(BinaryExpression expression, string op, Func<Context, BoolExpr, BoolExpr, BoolExpr> boolOp, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bvOp)
+    {
+        Expr left = Visit(expression.Left);
+        Expr right = Visit(expression.Right);
+
+        return (left, right) switch
         {
-            return build(this.context, boolLeft, boolRight);
+            (BoolExpr boolLeft, BoolExpr boolRight) => boolOp(this.context, boolLeft, boolRight),
+            (BitVecExpr bvLeft, BitVecExpr bvRight) => bvOp(this.context, bvLeft, bvRight),
+            _ => throw new NotSupportedException(
+                $"The '{op}' operator is supported on Boolean operands and on bit-vector (uint/ulong) symbols. It is not supported on plain integer symbols, whose Z3 sort has no bitwise operations."),
+        };
+    }
+
+    /// <summary>
+    /// Translates a shift, <c>&lt;&lt;</c> or <c>&gt;&gt;</c>, on a bit-vector.
+    /// </summary>
+    /// <param name="expression">Binary expression.</param>
+    /// <param name="op">The C# operator, for the diagnostic.</param>
+    /// <param name="bvOp">Builds the shift term from the value and the shift amount.</param>
+    /// <returns>Z3 expression handle.</returns>
+    /// <remarks>
+    /// C# types the shift amount as <c>int</c>, so the right operand translates to an integer and
+    /// is converted to a bit-vector of the value's width before the shift. Only a bit-vector value
+    /// can be shifted; Z3's integer sort has no shift.
+    /// </remarks>
+    private Expr VisitShift(BinaryExpression expression, string op, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bvOp)
+    {
+        Expr value = Visit(expression.Left);
+        Expr amount = Visit(expression.Right);
+
+        if (value is not BitVecExpr bvValue)
+        {
+            throw new NotSupportedException($"The '{op}' shift operator is supported only on bit-vector (uint/ulong) symbols.");
         }
 
-        throw new NotSupportedException(
-            $"The '{op}' operator is supported only on Boolean operands. A bitwise operation on integer symbols is not supported, because it would need a bit-vector representation the library does not expose.");
+        BitVecExpr bvAmount = amount as BitVecExpr ?? this.context.MkInt2BV(bvValue.SortSize, (IntExpr)amount);
+
+        return bvOp(this.context, bvValue, bvAmount);
     }
 
     /// <summary>
@@ -385,6 +476,10 @@ internal sealed class ExpressionVisitor
             case TypeCode.Int32:
             case TypeCode.Int64:
                 return this.context.MkInt(Convert.ToInt64(val));
+            case TypeCode.UInt32:
+            case TypeCode.UInt64:
+                // uint and ulong are bit-vectors of their width. See #99's bit-vector follow-up.
+                return this.context.MkBV(Convert.ToUInt64(val), Theorem.BitVectorWidth(Type.GetTypeCode(val.GetType()))!.Value);
             case TypeCode.Boolean:
                 return this.context.MkBool((bool)val);
             case TypeCode.Single:
