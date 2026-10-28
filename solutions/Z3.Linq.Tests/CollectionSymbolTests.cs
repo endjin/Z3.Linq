@@ -556,11 +556,19 @@ public class CollectionSymbolTests
     /// A <c>short</c> element whose model value no <c>short</c> can hold fails loudly.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The element read is a checked cast, as the scalar arm has been since #63 and for the same
     /// reason: the array's range is an unbounded <c>Int</c>, so a constraint written against the
     /// widened <c>int</c> can be satisfied by a value the element cannot hold, and an unchecked
-    /// cast would wrap it into a plausible wrong answer. #87 - bounding the symbol so Z3 cannot
-    /// pick such a value - applies to elements exactly as it does to scalars.
+    /// cast would wrap it into a plausible wrong answer.
+    /// </para>
+    /// <para>
+    /// A scalar <c>short</c> is bounded to its range since #87, and the same constraint on one is
+    /// simply unsatisfiable. An element is not: the length of a collection is not known when the
+    /// constraints are asserted, and bounding every element would take a quantifier, which can
+    /// cost Z3 its completeness. So for an element the checked read is still what stands between
+    /// a loud answer and a wrong one, and this test is what holds it there.
+    /// </para>
     /// </remarks>
     [TestMethod]
     public void Solve_ShortArrayElementConstrainedOutsideShortRange_ThrowsOverflowException()
@@ -574,6 +582,32 @@ public class CollectionSymbolTests
 
         // Act & Assert
         Should.Throw<OverflowException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// A <see cref="DateTime"/> element constrained beyond the range of the type fails loudly,
+    /// naming the symbol.
+    /// </summary>
+    /// <remarks>
+    /// The element counterpart of the guard #83 added, and since #87 the only way to reach it: a
+    /// scalar <see cref="DateTime"/> is bounded and the same constraint on one is unsatisfiable.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeArrayElementConstrainedBeyondMaxValue_ThrowsOverflowExceptionNamingIt()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        DateTime max = DateTime.MaxValue;
+        var theorem = context.NewTheorem<DateTimeArrayEnvironment>()
+            .Where(t => t.Values[0] > max)
+            .Where(t => t.Length == 2);
+
+        // Act
+        OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldContain("Values");
+        exception.Message.ShouldContain("0001-01-01 to 9999-12-31");
     }
 
     /// <summary>
