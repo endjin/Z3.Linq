@@ -50,12 +50,12 @@ public class UnsupportedExpressionTests
     /// A cast to a type the sort mapping does not know falls through to the catch-all.
     /// </summary>
     /// <remarks>
-    /// This pinned <c>(long)t.X1</c> until #76, when the Convert case chose by target type and
-    /// had no arm for <c>long</c>. Conversions are now decided by the sorts involved, using the
-    /// same mapping the symbols are declared with, so what is unsupported is a target type that
-    /// mapping has no row for - <c>byte</c> here. Note this one is NotImplementedException
-    /// rather than NotSupportedException - the throw sites are not consistent about which they
-    /// use.
+    /// This pinned <c>(long)t.X1</c> until #76, then <c>(byte)</c> until byte became a supported
+    /// integer type. Conversions are decided by the sorts involved, using the same mapping the
+    /// symbols are declared with, so what is unsupported is a target type that mapping has no row
+    /// for - <c>nint</c> here, whose <c>TypeCode</c> is <c>Object</c>. Note this one is
+    /// NotImplementedException rather than NotSupportedException - the throw sites are not
+    /// consistent about which they use.
     /// </remarks>
     [TestMethod]
     public void Solve_CastToAnUnmappedType_ThrowsNotImplementedException()
@@ -63,7 +63,7 @@ public class UnsupportedExpressionTests
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>()
-            .Where(t => (byte)t.X1 == 1);
+            .Where(t => (nint)t.X1 == 1);
 
         // Act & Assert
         Should.Throw<NotImplementedException>(() => theorem.Solve());
@@ -77,20 +77,6 @@ public class UnsupportedExpressionTests
         // which is worth knowing when diagnosing one of these.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<CharEnvironment>().Where(t => t.Other == 1);
-
-        // Act & Assert
-        Should.Throw<NotSupportedException>(() => theorem.Solve());
-    }
-
-    [TestMethod]
-    public void Solve_ByteProperty_ThrowsNotSupportedException()
-    {
-        // Arrange: byte and ushort are deliberately not mapped, even though uint and ulong are
-        // bit-vectors - because C# promotes byte and ushort to int in every expression, so such a
-        // symbol could never keep a bit-vector sort through a constraint. See the bit-vector work
-        // and BitVectorSymbolTests.
-        using var context = new Z3Context();
-        var theorem = context.NewTheorem<ByteEnvironment>().Where(t => t.Other == 1);
 
         // Act & Assert
         Should.Throw<NotSupportedException>(() => theorem.Solve());
@@ -111,36 +97,31 @@ public class UnsupportedExpressionTests
     }
 
     /// <summary>
-    /// An enum whose underlying type is not one the environment builder maps is rejected by
-    /// name, before anything is translated.
+    /// A <c>byte</c>-backed enum round-trips, like an <c>int</c>-backed one.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// An enum is only ever as supported as its underlying type. #63 fixed the <c>int</c>-backed
-    /// case - <see cref="DayOfWeek"/> and friends - which is now round-tripped in
-    /// <c>SymbolTypeMarshallingTests</c>. A <c>byte</c>-backed enum is <c>TypeCode.Byte</c>,
-    /// which the sort mapping does not handle, so it stops at the same guard that rejects a
-    /// bare <c>byte</c> or <c>ushort</c>.
-    /// </para>
-    /// <para>
-    /// This is the outcome #63 asked for where a type genuinely is not supported: a
-    /// <see cref="NotSupportedException"/> naming the member, rather than an
-    /// <see cref="InvalidCastException"/> from inside the visitor. Pinned so the distinction
-    /// between the two enum cases does not quietly collapse.
-    /// </para>
+    /// An enum is only ever as supported as its underlying type. #63 made the <c>int</c>-backed
+    /// case work, and once <c>byte</c>, <c>sbyte</c> and <c>ushort</c> became supported integer
+    /// types every enum underlying type is one the sort mapping handles - so a <c>byte</c>-backed
+    /// enum is created as a bounded integer and read back through reflection like any other.
+    /// Whether the value is constrained to the defined members is a separate question, #97.
     /// </remarks>
     [TestMethod]
-    public void Solve_EnumPropertyWithAnUnsupportedUnderlyingType_ThrowsNotSupportedException()
+    public void Solve_ByteBackedEnumProperty_RoundTripsTheValue()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<ByteEnumEnvironment>()
-            .Where(t => t.Size == ByteBackedEnum.Large)
-            .Where(t => t.Other == 1);
 
-        // Act & Assert
-        Should.Throw<NotSupportedException>(() => theorem.Solve())
-            .Message.ShouldContain("Size");
+        // Act
+        var result = context.NewTheorem<ByteEnumEnvironment>()
+            .Where(t => t.Size == ByteBackedEnum.Large)
+            .Where(t => t.Other == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Size.ShouldBe(ByteBackedEnum.Large);
+        result.Other.ShouldBe(1);
     }
 
     [TestMethod]
@@ -178,13 +159,6 @@ public class UnsupportedExpressionTests
     private sealed class CharEnvironment
     {
         public char Value { get; set; }
-
-        public int Other { get; set; }
-    }
-
-    private sealed class ByteEnvironment
-    {
-        public byte Value { get; set; }
 
         public int Other { get; set; }
     }

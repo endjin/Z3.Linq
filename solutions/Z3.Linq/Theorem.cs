@@ -397,7 +397,10 @@ public class Theorem
     {
         return typeCode switch
         {
+            TypeCode.SByte => (sbyte.MinValue, sbyte.MaxValue),
+            TypeCode.Byte => (byte.MinValue, byte.MaxValue),
             TypeCode.Int16 => (short.MinValue, short.MaxValue),
+            TypeCode.UInt16 => (ushort.MinValue, ushort.MaxValue),
             TypeCode.Int32 => (int.MinValue, int.MaxValue),
             TypeCode.Int64 => (long.MinValue, long.MaxValue),
             TypeCode.DateTime => (DateTime.MinValue.Ticks, DateTime.MaxValue.Ticks),
@@ -448,7 +451,7 @@ public class Theorem
         return typeCode switch
         {
             TypeCode.String => context.StringSort,
-            TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64 or TypeCode.DateTime => context.IntSort,
+            TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32 or TypeCode.Int64 or TypeCode.DateTime => context.IntSort,
             TypeCode.Boolean => context.BoolSort,
             TypeCode.Single or TypeCode.Decimal or TypeCode.Double => context.RealSort,
             TypeCode.UInt32 or TypeCode.UInt64 => context.MkBitVecSort(BitVectorWidth(typeCode)!.Value),
@@ -463,13 +466,18 @@ public class Theorem
     /// <param name="typeCode">The type code of the CLR type.</param>
     /// <returns>The bit width, or <see langword="null"/>.</returns>
     /// <remarks>
+    /// <para>
     /// <c>uint</c> and <c>ulong</c> travel through Z3 as bit-vectors of their width - so they
     /// carry wrapping arithmetic, bitwise operators and shifts, which a mathematical integer has
-    /// no counterpart for. <c>short</c>, <c>int</c> and <c>long</c> stay unbounded integers.
-    /// <c>byte</c> and <c>ushort</c> are deliberately not mapped: C# promotes them to <c>int</c>
-    /// in every expression, so a <c>byte</c> symbol could never keep its bit-vector sort through
-    /// a constraint, and mapping it would only produce a confusing conversion error rather than a
-    /// usable symbol.
+    /// no counterpart for.
+    /// </para>
+    /// <para>
+    /// <c>byte</c>, <c>sbyte</c> and <c>ushort</c> are not bit-vectors: C# promotes them to
+    /// <c>int</c> in every expression, so such a symbol could never keep a bit-vector sort through
+    /// a constraint. They map to the integer sort instead, bounded to their range like
+    /// <c>short</c> - so they support equality, ordering and arithmetic but not bitwise operators,
+    /// which need one of the bit-vector types above.
+    /// </para>
     /// </remarks>
     internal static uint? BitVectorWidth(TypeCode typeCode)
     {
@@ -684,6 +692,15 @@ public class Theorem
                             // an unchecked cast would wrap it into a plausible wrong answer. See #63.
                             numVal = checked((short)((IntNum)numValExpr).Int);
                             break;
+                        case TypeCode.SByte:
+                            numVal = checked((sbyte)((IntNum)numValExpr).Int);
+                            break;
+                        case TypeCode.Byte:
+                            numVal = checked((byte)((IntNum)numValExpr).Int);
+                            break;
+                        case TypeCode.UInt16:
+                            numVal = checked((ushort)((IntNum)numValExpr).Int);
+                            break;
                         case TypeCode.Int32:
                             numVal = ((IntNum)numValExpr).Int;
                             break;
@@ -756,6 +773,15 @@ public class Theorem
                     // asserted, so the check cannot fire here, but it costs nothing and the element
                     // arm above still depends on it. See #63.
                     value = checked((short)((IntNum)val).Int);
+                    break;
+                case TypeCode.SByte:
+                    value = checked((sbyte)((IntNum)val).Int);
+                    break;
+                case TypeCode.Byte:
+                    value = checked((byte)((IntNum)val).Int);
+                    break;
+                case TypeCode.UInt16:
+                    value = checked((ushort)((IntNum)val).Int);
                     break;
                 case TypeCode.Int32:
                     value = ((IntNum)val).Int;
