@@ -8,8 +8,8 @@ namespace Z3.Linq.Tests;
 /// <para>
 /// Two code paths sit behind these. A compiler-generated type - an anonymous type - is created
 /// uninitialised and populated by writing to the compiler's backing fields, matched by name
-/// (Theorem.cs:607-648). Everything else is created with <c>Activator.CreateInstance</c> and
-/// populated through its properties and fields (Theorem.cs:651-696).
+/// (Theorem.cs:610-651). Everything else is created with <c>Activator.CreateInstance</c> and
+/// populated through its properties and fields (Theorem.cs:654-699).
 /// </para>
 /// <para>
 /// The split matters because the two support different types. The anonymous path handles only
@@ -107,7 +107,7 @@ public class EnvironmentTypeTests
     /// The anonymous-type path supports only <c>bool</c> and <c>int</c>.
     /// </summary>
     /// <remarks>
-    /// Theorem.cs:645 throws for any other property type, so a double that is perfectly usable
+    /// Theorem.cs:648 throws for any other property type, so a double that is perfectly usable
     /// in a named environment cannot be used in an anonymous one. This is a real restriction
     /// rather than a defect - the branch never grew the other cases - but it is undocumented,
     /// and the failure names the property rather than explaining the restriction.
@@ -185,7 +185,7 @@ public class EnvironmentTypeTests
     /// A positional record cannot be used as an environment.
     /// </summary>
     /// <remarks>
-    /// Environments are constructed with <c>Activator.CreateInstance(t)</c> (Theorem.cs:653),
+    /// Environments are constructed with <c>Activator.CreateInstance(t)</c> (Theorem.cs:657),
     /// and a positional record's only constructor takes its members, so there is nothing to
     /// call. This is the distinction the stale comment on RecordTheorem was probably reaching
     /// for: records work, positional records do not.
