@@ -123,7 +123,7 @@ public class OptimizationTests
     [TestMethod]
     public void OrderBy_BeforeSolveIsCalled_DoesNotSolveAnything()
     {
-        // Arrange: OrderBy returns a deferred solvable (Theorem{T}.cs:70), so building the query
+        // Arrange: OrderBy returns a deferred solvable (Theorem{T}.cs:78), so building the query
         // must not touch Z3. The log is the observable proof - Theorem.cs:178 writes a line per
         // asserted constraint, so an eager implementation would have written to it already.
         using var log = new StringWriter();
@@ -340,5 +340,50 @@ public class OptimizationTests
         // Assert
         parentMinimum.X1.ShouldBe(1);
         childMinimum.X1.ShouldBe(6);
+    }
+
+    /// <summary>
+    /// An unconstrained symbol does not stop an optimisation returning its optimum.
+    /// </summary>
+    /// <remarks>
+    /// <c>Optimize</c> reads its answer from the optimiser's model rather than a solver's, so it
+    /// needs its own coverage of #51 - every test in this file constrained X2 purely to avoid
+    /// the defect. The minimum over a closed range is unique, so asserting it exactly is safe;
+    /// X2 is free and is not asserted.
+    /// </remarks>
+    [TestMethod]
+    public void Optimize_WithAnUnconstrainedSymbol_ReturnsTheOptimum()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<int, int>>()
+            .Where(t => t.X1 >= 5)
+            .Where(t => t.X1 <= 9)
+            .Optimize(Optimization.Minimize, t => t.X1);
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(5);
+    }
+
+    [TestMethod]
+    public void OrderBy_WithAnUnconstrainedSymbol_ReturnsTheOptimum()
+    {
+        // Arrange: the query-syntax route to the same code path, kept for the symmetry this
+        // file maintains between Optimize and OrderBy.
+        using var context = new Z3Context();
+
+        // Act
+        var result = (from t in context.NewTheorem<Symbols<int, int>>()
+                      where t.X1 >= 5
+                      where t.X1 <= 9
+                      orderby t.X1
+                      select t).Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(5);
     }
 }

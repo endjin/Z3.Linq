@@ -218,6 +218,63 @@ public class CollectionSymbolTests
         Should.Throw<InvalidCastException>(() => theorem.Solve());
     }
 
+    /// <summary>
+    /// An array symbol that no constraint touches is still materialised, at its initialised
+    /// length.
+    /// </summary>
+    /// <remarks>
+    /// The collection form of #51, and the only test covering the element-select evaluation.
+    /// With no element constrained, the array constant itself has no interpretation, so every
+    /// <c>MkSelect</c> against it evaluated to the select term rather than to a numeral. The
+    /// element values come from model completion and are not asserted; the length is, because
+    /// it comes from the instance rather than from the model.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_IntArraySymbolWithNoElementConstraints_ReturnsTheInitialisedLength()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<IntArrayEnvironment>()
+            .Where(t => t.Length == 3)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(3);
+        result.Length.ShouldBe(3);
+    }
+
+    /// <summary>
+    /// Constraining one element of an array leaves the rest resolvable.
+    /// </summary>
+    /// <remarks>
+    /// This one passed before #51 as well, and is here for the semantics it records rather than
+    /// as proof of the fix. Once any element is constrained the array constant has an
+    /// interpretation, and a free element resolves through that array's else-value rather than
+    /// being assigned independently - measured as <c>[10, 10, 10]</c> here. So free elements are
+    /// not independently arbitrary, which is why the blast radius of #51 on arrays was smaller
+    /// than it looks. Only the constrained element is asserted; the else-value is Z3's choice.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_IntArrayWithSomeElementsConstrained_KeepsTheConstrainedElements()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<IntArrayEnvironment>()
+            .Where(t => t.Values[0] == 10)
+            .Where(t => t.Length == 3)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(3);
+        result.Values[0].ShouldBe(10);
+    }
+
     private sealed class IntArrayEnvironment
     {
         public int[] Values { get; set; } = new int[3];

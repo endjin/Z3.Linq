@@ -18,6 +18,12 @@ namespace Z3.Linq.Tests;
 /// that was merely slow would pass an "is unsatisfiable" assertion. Keeping these obviously
 /// contradictory removes that risk.
 /// </para>
+/// <para>
+/// A symbol the returned model does not interpret takes an arbitrary value supplied by Z3's
+/// model completion (#51). That value is not part of any contract, so the tests here assert
+/// that the solve completed and that the constrained symbols survived - never what the free
+/// one came back as.
+/// </para>
 /// </remarks>
 [TestClass]
 public class TheoremSolveTests
@@ -72,53 +78,85 @@ public class TheoremSolveTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT: a symbol that no constraint mentions makes <c>Solve</c> throw.
+    /// A symbol that no constraint mentions does not stop the theorem being solved.
     /// </summary>
     /// <remarks>
-    /// Currently: <see cref="InvalidCastException"/>. Z3 only assigns model values to constants
-    /// that appear in the asserted formulas, and <c>model.Eval(expr)</c> defaults to
-    /// <c>completion: false</c>, so an unreferenced symbol evaluates to itself - an
-    /// <c>IntExpr</c> rather than an <c>IntNum</c> - and the cast at Theorem.cs:516 fails.
-    /// Should be: the theorem is satisfiable, so it should return a result with an arbitrary
-    /// value for the free symbol. The fix is <c>model.Eval(expr, completion: true)</c> at all
-    /// four call sites (Theorem.cs:445, 471, 507, 634).
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// The theorem is satisfiable, so X2 takes whatever value Z3's model completion supplies.
+    /// That value is not part of any contract and is deliberately not asserted; what matters is
+    /// that the solve completes and the constrained symbol is untouched. Fixed by #51 - this
+    /// previously threw <see cref="InvalidCastException"/>, because a symbol the model does not
+    /// interpret evaluates to itself rather than to a numeral.
     /// </remarks>
     [TestMethod]
-    public void Solve_TheoremWithUnconstrainedSymbol_ThrowsInvalidCastException()
+    public void Solve_TheoremWithAnUnconstrainedSymbol_ReturnsAResultAndKeepsTheConstrainedValue()
     {
-        // Arrange: X2 is never mentioned, so the model has no assignment for it.
+        // Arrange: X2 is never mentioned, so the solver has no reason to assign it. This is the
+        // repro from #51 verbatim.
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>().Where(t => t.X1 == 1);
 
-        // Act & Assert
-        Should.Throw<InvalidCastException>(() => theorem.Solve());
+        // Act
+        var result = theorem.Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(1);
     }
 
     /// <summary>
-    /// KNOWN DEFECT: the same failure with no constraints at all.
+    /// A theorem with no constraints at all is trivially satisfiable and returns a result.
     /// </summary>
     /// <remarks>
-    /// An unconstrained theorem is trivially satisfiable and should return a result with
-    /// arbitrary values. See <see cref="Solve_TheoremWithUnconstrainedSymbol_ThrowsInvalidCastException"/>
-    /// for the mechanism. Pins current behaviour.
+    /// The degenerate case of the test above: every symbol is free, so there is nothing to
+    /// assert beyond the solve completing. This is the only test that checks a solver is asked
+    /// to solve without a single assertion.
     /// </remarks>
     [TestMethod]
-    public void Solve_TheoremWithNoConstraints_ThrowsInvalidCastException()
+    public void Solve_TheoremWithNoConstraints_ReturnsAResult()
     {
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<Symbols<int, int>>();
 
-        // Act & Assert
-        Should.Throw<InvalidCastException>(() => theorem.Solve());
+        // Act
+        var result = theorem.Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+    }
+
+    /// <summary>
+    /// A symbol mentioned only by a constraint the solver discards is still populated.
+    /// </summary>
+    /// <remarks>
+    /// "Mentioned by a constraint" is not the condition that matters - "interpreted by the
+    /// returned model" is. A tautology is reduced to true as it is asserted, so X1 is never
+    /// created and has no interpretation, despite the query naming it twice. Before #51 this
+    /// threw for exactly the same reason an unmentioned symbol did, which is why the fix is
+    /// model completion rather than an inspection of the constraints.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_SymbolMentionedOnlyInATautology_ReturnsAResult()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = (from t in context.NewTheorem<Symbols<int, int>>()
+                      where t.X1 > 0 || t.X1 <= 0
+                      where t.X2 == 0
+                      select t).Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
     }
 
     [TestMethod]
     public void Solve_EverySymbolConstrained_ReturnsResult()
     {
-        // Arrange: the working counterpart to the two pins above - once every symbol is
-        // referenced by a constraint, the model assigns all of them and materialisation works.
+        // Arrange: the control for #51. Constraining every symbol was the workaround for that
+        // defect, and it must keep behaving identically now that it is no longer necessary.
         using var context = new Z3Context();
 
         // Act

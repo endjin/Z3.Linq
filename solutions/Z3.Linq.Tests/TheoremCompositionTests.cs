@@ -8,7 +8,7 @@ namespace Z3.Linq.Tests;
 /// <remarks>
 /// Most of these assert without solving at all, which makes them the cheapest tests in the
 /// suite. <c>Where</c> returns a new <see cref="Theorem{T}"/> over a concatenated constraint
-/// sequence (Theorem{T}.cs:60), so composition is immutable and a theorem can be reused.
+/// sequence (Theorem{T}.cs:69), so composition is immutable and a theorem can be reused.
 /// </remarks>
 [TestClass]
 public class TheoremCompositionTests
