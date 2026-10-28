@@ -33,4 +33,19 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
+  <!--
+    MSTest.Sdk adds Microsoft.Testing.Extensions.CodeCoverage implicitly and pins its version
+    via this property, defaulting to an older build than the dotnet-coverage collector that the
+    ZeroFailed test task runs. The reference is injected from a .targets file imported AFTER the
+    project body, so a per-project <PackageReference Update VersionOverride> would be a no-op -
+    setting the property here, early in the SDK chain, is the supported override. Keep it in step
+    with the collector version.
+
+    Note there is deliberately NO PackageVersion for this package in Directory.Packages.props:
+    under CPM the SDK injects its own PackageVersion from this property, and a second one trips
+    NU1506 on restore.
+  -->
+  <PropertyGroup>
+    <MicrosoftTestingExtensionsCodeCoverageVersion>18.10.0</MicrosoftTestingExtensionsCodeCoverageVersion>
+  </PropertyGroup>
 </Project>

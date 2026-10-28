@@ -6,8 +6,10 @@
   <Folder Name="/Solution Items/">
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
+    <File Path="../global.json" />
   </Folder>
   <Project Path="Z3.Linq/Z3.Linq.csproj" />
   <Project Path="Z3.Linq.Examples/Z3.Linq.Examples.csproj" />
   <Project Path="Z3.Linq.Demo/Z3.Linq.Demo.csproj" />
+  <Project Path="Z3.Linq.Tests/Z3.Linq.Tests.csproj" />
 </Solution>

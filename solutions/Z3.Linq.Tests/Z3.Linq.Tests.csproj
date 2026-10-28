@@ -1,0 +1,21 @@
+<Project Sdk="MSTest.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Z3.Linq.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Brings in the Microsoft Code Coverage and TRX report MTP extensions. -->
+    <TestingExtensionsProfile>Default</TestingExtensionsProfile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Z3.Linq\Z3.Linq.csproj" />
+  </ItemGroup>
+
+</Project>
