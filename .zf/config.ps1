@@ -29,7 +29,7 @@ $SkipTestReport = $false
 $SkipAnalysis = $false
 $SkipPackage = $false
 
-# Releases are ON HOLD. The build uses Microsoft.Z3 5.1.0 for its Linux and arm64 native
+# Releases are ON HOLD. The build uses Microsoft.Z3 5.3.2 for its Linux and arm64 native
 # binaries, but that version is not on nuget.org, so a published Z3.Linq would declare a
 # dependency no consumer can restore (NU1102). Lift this once Microsoft.Z3 5.x is published -
 # see https://github.com/endjin/Z3.Linq/issues/60 and https://github.com/Z3Prover/z3/issues/10711
