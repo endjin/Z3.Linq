@@ -123,6 +123,7 @@ public class GraphColouringTests
     }
 
     [TestMethod]
+    [DataRow(0, "", 0, DisplayName = "Empty graph needs no colours")]
     [DataRow(1, "", 1, DisplayName = "Single vertex needs 1 colour")]
     [DataRow(4, "0-1,1-2,2-3", 2, DisplayName = "Path needs 2 colours")]
     [DataRow(4, "0-1,1-2,2-3,3-0", 2, DisplayName = "Even cycle needs 2 colours")]

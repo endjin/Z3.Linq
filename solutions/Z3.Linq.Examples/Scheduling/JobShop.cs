@@ -71,7 +71,10 @@ public class JobShop
     public static Theorem<JobShop> Create(Z3Context context, (int Machine, int Duration)[][] jobs)
     {
         var tasks = Tasks(jobs);
-        var theorem = context.NewTheorem(new JobShop { Start = new int[tasks.Length] });
+        // Each task bounds Makespan from below, but with no tasks it would be unbounded, and
+        // minimising it would return the library's implicit int.MinValue.
+        var theorem = context.NewTheorem(new JobShop { Start = new int[tasks.Length] })
+            .Where(t => t.Makespan >= 0);
 
         for (int i = 0; i < tasks.Length; i++)
         {

@@ -48,7 +48,10 @@ public class GraphColouring
     {
         ArgumentOutOfRangeException.ThrowIfNegative(vertexCount);
 
-        var theorem = context.NewTheorem(new GraphColouring { Colour = new int[vertexCount] });
+        // The vertex constraints below bound Colours from below, but an empty graph has none, and
+        // minimising an unbounded symbol would return the library's implicit int.MinValue.
+        var theorem = context.NewTheorem(new GraphColouring { Colour = new int[vertexCount] })
+            .Where(t => t.Colours >= 0);
 
         for (int vertex = 0; vertex < vertexCount; vertex++)
         {

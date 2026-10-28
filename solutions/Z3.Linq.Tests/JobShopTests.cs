@@ -91,6 +91,26 @@ public class JobShopTests
     }
 
     [TestMethod]
+    [DataRow(0, DisplayName = "No jobs")]
+    [DataRow(2, DisplayName = "Two jobs with no tasks")]
+    public void Solve_NoTasksOrderedByMakespan_TakesNoTime(int jobCount)
+    {
+        // Arrange: no task constrains the makespan, so only its own lower bound holds it at zero.
+        using var context = new Z3Context();
+        var jobs = Enumerable.Repeat<(int Machine, int Duration)[]>([], jobCount).ToArray();
+
+        // Act
+        var result = (from t in JobShop.Create(context, jobs)
+                      orderby t.Makespan
+                      select t).Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Makespan.ShouldBe(0);
+        result.Start.ShouldBeEmpty();
+    }
+
+    [TestMethod]
     public void Tasks_BookInstance_NumbersTasksJobByJob()
     {
         // Arrange, Act
