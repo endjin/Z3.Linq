@@ -167,13 +167,14 @@ public static class BitTwiddlingTheorems
 
     /// <summary>
     /// The same search as <see cref="HasZeroByteCounterexample(Z3Context)"/> for the expression
-    /// without <c>~</c>, as the book's C listing prints it.
+    /// without the <c>~</c>, an easy slip when copying the trick.
     /// </summary>
     /// <remarks>
-    /// A counterexample exists: a byte of <c>0xC0</c> or more in every position, such as
-    /// <c>0xC0C0C0C0</c>, makes the expression report a zero byte that is not there.
+    /// Counterexamples exist in both directions. Many words with no zero byte, such as
+    /// <c>0xC0C0C0C0</c> or <c>0x01010181</c>, make the expression report one, and words that do
+    /// have a zero byte, starting with <c>0</c> itself, can make it report none.
     /// </remarks>
-    public static Theorem<(uint v, int unused)> MisprintedHasZeroByteCounterexample(Z3Context context)
+    public static Theorem<(uint v, int unused)> HasZeroByteWithoutNotCounterexample(Z3Context context)
         => from t in context.NewTheorem<(uint v, int unused)>()
            where (((t.v - 0x01010101u) & t.v & 0x80808080u) != 0u)
               != ((t.v & 0x000000FFu) == 0u || (t.v & 0x0000FF00u) == 0u || (t.v & 0x00FF0000u) == 0u || (t.v & 0xFF000000u) == 0u)
@@ -187,7 +188,7 @@ public static class BitTwiddlingTheorems
     /// <summary>
     /// Evaluates the "has a zero byte" trick without the <c>~v</c> term, in plain C#.
     /// </summary>
-    public static bool MisprintedHasZeroByte(uint v) => ((v - 0x01010101u) & v & 0x80808080u) != 0u;
+    public static bool HasZeroByteWithoutNot(uint v) => ((v - 0x01010101u) & v & 0x80808080u) != 0u;
 
     /// <summary>
     /// The reference for the "has a zero byte" trick: checks each byte, in plain C#.
@@ -201,8 +202,9 @@ public static class BitTwiddlingTheorems
     /// </summary>
     /// <remarks>
     /// An inverse exists exactly when the divisor is odd. Multiplying a multiple of the divisor
-    /// by the inverse divides it exactly, which is how compilers replace division by a constant
-    /// with a multiplication (book section 3.7).
+    /// by the inverse divides it exactly, which is how compilers implement exact division and
+    /// divisibility tests by a constant (book section 3.7). It does not divide other values:
+    /// general division by a constant uses a different "magic number" and a shift.
     /// </remarks>
     public static Theorem<(uint divisor, uint inverse)> ModularInverse(Z3Context context, uint divisor)
         => from t in context.NewTheorem<(uint divisor, uint inverse)>()

@@ -78,8 +78,8 @@ public class PackageManagerTests
     [DataRow(2, 8, DisplayName = "programA v2 + programB v8")]
     public void Resolve_RequestTheCatalogueCannotMeet_IsUnsatisfiable(int programA, int programB)
     {
-        // Arrange: programB v8 needs library A v6 or later, which does not exist. With the book's
-        // 999 for "not installed", 999 >= 6 would have let an absent library A pass that rule.
+        // Arrange: programB v8 needs library A v6 or later, which does not exist, and either
+        // programA version pins library A to v2 or v3 anyway. The book's model rejects both too.
         using var context = new Z3Context();
         var theorem = PackageManager.WithPrograms(PackageManager.Create(context), programA, programB);
 
@@ -111,7 +111,7 @@ public class PackageManagerTests
     }
 
     [TestMethod]
-    public void Create_LibraryDRequested_InstallsItAtItsNewestVersion()
+    public void Resolve_LibraryDRequested_InstallsItAtItsNewestVersion()
     {
         // Arrange: when a request forces library D in, the cost now prefers its newest version.
         // This shows that "not installed" wins only because nothing needs the library, not

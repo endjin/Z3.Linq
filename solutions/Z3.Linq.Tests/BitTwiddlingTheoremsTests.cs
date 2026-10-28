@@ -14,7 +14,7 @@ using Z3.Linq.Examples.BitTwiddling;
 /// </para>
 /// <para>
 /// Where a counterexample exists it is not unique (the naive average fails for about half of
-/// all pairs, and the misprinted zero-byte test for many values), so those tests do not pin
+/// all pairs, and the zero-byte test without <c>~v</c> for many values), so those tests do not pin
 /// the input Z3 returns. They re-evaluate the trick and the reference in plain C# on that input
 /// and assert that the two really disagree. The inverse of 3 modulo 2^32 is unique (a separate
 /// test proves it), so its value is pinned.
@@ -146,17 +146,17 @@ public class BitTwiddlingTheoremsTests
     }
 
     [TestMethod]
-    public void TrySolve_MisprintedHasZeroByteCounterexample_FindsAValueWhereTrickAndReferenceDisagree()
+    public void TrySolve_HasZeroByteWithoutNotCounterexample_FindsAValueWhereTrickAndReferenceDisagree()
     {
         // Arrange
         using var context = new Z3Context();
 
         // Act
-        bool found = BitTwiddlingTheorems.MisprintedHasZeroByteCounterexample(context).TrySolve(out var result);
+        bool found = BitTwiddlingTheorems.HasZeroByteWithoutNotCounterexample(context).TrySolve(out var result);
 
         // Assert
         found.ShouldBeTrue();
-        BitTwiddlingTheorems.MisprintedHasZeroByte(result.v).ShouldNotBe(
+        BitTwiddlingTheorems.HasZeroByteWithoutNot(result.v).ShouldNotBe(
             BitTwiddlingTheorems.HasZeroByteReference(result.v),
             $"v = 0x{result.v:X8}");
     }

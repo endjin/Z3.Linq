@@ -12,7 +12,7 @@ using Z3.Linq.Examples.Puzzles;
 /// nothing else satisfies the theorem. So the full assignment is safe to pin.
 /// </para>
 /// <para>
-/// The solve takes about 20 ms; the uniqueness check takes a similar time.
+/// The solve and the uniqueness check each take tens of milliseconds.
 /// </para>
 /// </remarks>
 [TestClass]

@@ -37,8 +37,10 @@ AnsiConsole.Write(new Panel(
     "nothing. No version reaches 100, so [italic]orderby[/] first installs only the libraries " +
     "the programs need, then picks the newest versions of those.\n\n" +
     "A missing library is version 0, which fails every \"v2+\" rule. The book uses 999 " +
-    "for \"not installed\" and maximises the sum of versions instead. That rewards a " +
-    "library for being absent, and lets an absent library pass a \"v6+\" rule.")
+    "for \"not installed\" and maximises the sum of versions instead. That scores an " +
+    "absent library above any real version, and in general lets it pass a rule such as " +
+    "\"v6+\". In this catalogue every programA version pins library A, so both encodings " +
+    "give the same plans; 0 simply keeps the objective honest.")
     .Header("[white]What Z3 minimises[/]").Border(BoxBorder.Rounded).BorderColor(Color.Grey));
 AnsiConsole.WriteLine();
 

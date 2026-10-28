@@ -13,7 +13,7 @@ using Z3.Linq.Examples.Puzzles;
 /// so these tests also cover member chains two levels deep at a realistic size.
 /// </para>
 /// <para>
-/// The solve takes about 25 ms.
+/// The solve takes tens of milliseconds.
 /// </para>
 /// </remarks>
 [TestClass]

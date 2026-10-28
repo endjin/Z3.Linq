@@ -54,6 +54,27 @@ public class NQueensTests
     }
 
     [TestMethod]
+    public void TrySolve_FourByFourBoardEnumerated_FindsExactlyTheTwoKnownPlacements()
+    {
+        // Arrange: checking each answer's validity would not catch a model that is too strict, so
+        // block every placement Z3 finds until none is left and compare the full set.
+        using var context = new Z3Context();
+        var theorem = NQueens.Create(context, 4);
+        var found = new List<int[]>();
+
+        // Act
+        while (found.Count < 10 && theorem.TrySolve(out var board))
+        {
+            found.Add(board.Column);
+            int c0 = board.Column[0], c1 = board.Column[1], c2 = board.Column[2], c3 = board.Column[3];
+            theorem = theorem.Where(t => t.Column[0] != c0 || t.Column[1] != c1 || t.Column[2] != c2 || t.Column[3] != c3);
+        }
+
+        // Assert
+        found.Select(columns => string.Join(",", columns)).Order().ShouldBe(["1,3,0,2", "2,0,3,1"]);
+    }
+
+    [TestMethod]
     [DataRow(2, DisplayName = "2 x 2")]
     [DataRow(3, DisplayName = "3 x 3")]
     public void TrySolve_BoardWithNoPlacement_ReturnsFalse(int size)

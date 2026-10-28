@@ -6,7 +6,7 @@
 // holds one queen, so the board is one integer symbol per row (the queen's column). Two queens
 // may not share a column, and the distance between their columns may not equal the distance
 // between their rows. NQueens.Create(ctx, n) holds the model. The demo solves 8 x 8 and 12 x 12,
-// then shows that 2 x 2 and 3 x 3 have no placement. From "SAT/SMT by Example" (Dennis
+// then checks 2 x 2 to 4 x 4: the first two have no placement. From "SAT/SMT by Example" (Dennis
 // Yurichev), section 8.4, https://smt.st
 //
 //   dotnet run demos/n-queens.cs

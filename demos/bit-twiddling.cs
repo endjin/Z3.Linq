@@ -5,8 +5,8 @@
 // Bit-twiddling tricks proved correct for every input, or shown to be wrong, by Z3. A uint or
 // ulong symbol is a bit-vector, so Z3 reasons about all 2^32 (or 2^64) values at once. Each
 // theorem asks for an input where a trick and a plain reference implementation disagree: no
-// answer is a proof, and an answer is a concrete counterexample. The last table finds the
-// multiplicative inverse that compilers use to replace division by a constant.
+// answer is a proof, and an answer is a concrete counterexample. The last table finds
+// multiplicative inverses, which divide exact multiples of a constant by multiplying.
 //
 // Adapted from "SAT/SMT by Example" (Dennis Yurichev), sections 3.7, 4.3, 4.4, 4.10, 4.11 and
 // 4.12, https://smt.st
@@ -62,8 +62,8 @@ AnsiConsole.Status().Spinner(Spinner.Known.Dots).SpinnerStyle(Style.Parse("fuchs
             BitTwiddlingTheorems.BranchlessMinMaxCounterexample(ctx), r => $"x=0x{r.x:X8}, y=0x{r.y:X8}");
         Prove(proofs, "Has a zero byte", "((v - 0x01010101) & ~v & 0x80808080) != 0 exactly when a byte is 0",
             BitTwiddlingTheorems.HasZeroByteCounterexample(ctx), r => $"v=0x{r.v:X8}");
-        Prove(proofs, "Has a zero byte, no ~v", "the same without ~v, as the book's listing prints it",
-            BitTwiddlingTheorems.MisprintedHasZeroByteCounterexample(ctx), r => $"v=0x{r.v:X8}");
+        Prove(proofs, "Has a zero byte, no ~v", "the same with the ~ left out",
+            BitTwiddlingTheorems.HasZeroByteWithoutNotCounterexample(ctx), r => $"v=0x{r.v:X8}");
         Prove(proofs, "Divide by 3 by multiplying", "(3 * x) * 0xAAAAAAAB == x for every x",
             BitTwiddlingTheorems.ModularInverseDividesCounterexample(ctx), r => $"x=0x{r.x:X8}");
         Prove(proofs, "Unique inverse of 3", "0xAAAAAAAB is the only m with 3 * m == 1",
@@ -72,7 +72,8 @@ AnsiConsole.Status().Spinner(Spinner.Known.Dots).SpinnerStyle(Style.Parse("fuchs
 
 AnsiConsole.Write(proofs);
 AnsiConsole.MarkupLine("[grey]  The naive average overflows when x + y reaches 2^32.[/]");
-AnsiConsole.MarkupLine("[grey]  Without ~v the zero-byte test reports a zero byte that is not there.[/]");
+AnsiConsole.MarkupLine("[grey]  Without ~v the zero-byte test is wrong both ways: it reports zero[/]");
+AnsiConsole.MarkupLine("[grey]  bytes that are not there, and misses some that are (0 itself).[/]");
 AnsiConsole.WriteLine();
 
 var inverses = new Table().Border(TableBorder.Rounded).BorderColor(Color.Fuchsia)
