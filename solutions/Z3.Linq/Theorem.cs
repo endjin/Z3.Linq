@@ -560,6 +560,13 @@ public class Theorem
                     value = val.String;
                     break;
                 case TypeCode.Int16:
+                    // Int16 cannot share the Int32 arm: the model value is an int, and reflection
+                    // refuses to write an int to a short member. The cast is checked because the
+                    // symbol is an unbounded MkIntConst, so Z3 may return a value no short can
+                    // hold - an unchecked cast would wrap it into a plausible wrong answer.
+                    // See #63.
+                    value = checked((short)((IntNum)val).Int);
+                    break;
                 case TypeCode.Int32:
                     value = ((IntNum)val).Int;
                     break;

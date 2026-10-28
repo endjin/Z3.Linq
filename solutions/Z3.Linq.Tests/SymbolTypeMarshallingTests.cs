@@ -11,11 +11,11 @@ namespace Z3.Linq.Tests;
 /// which solution was chosen.
 /// </para>
 /// <para>
-/// One of the types listed as supported still does not work, and is pinned as a characterisation
-/// test rather than skipped - short (#63). It fails in the marshalling layer, which no example in
-/// the repository exercises, which is why it went unnoticed. float was a second until #54 was
-/// fixed, and DateTime a third until #56 - that one returned a value rather than throwing, so it
-/// took a test asserting the value to find it at all.
+/// Every type listed as supported now works. Three did not when this file was written: short
+/// (#63), float (#54) and DateTime (#56). All three failed in the marshalling layer, which no
+/// example in the repository exercises, which is why they went unnoticed. DateTime is the one
+/// worth remembering - it returned a value rather than throwing, so only a test asserting the
+/// value could find it at all.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -160,25 +160,192 @@ public class SymbolTypeMarshallingTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#63): no theorem over a short symbol can be solved.
+    /// A <c>short</c> symbol round-trips the value it was constrained to.
     /// </summary>
     /// <remarks>
-    /// A short symbol is created with MkIntConst, but C# widens short to int for the comparison
-    /// and ExpressionVisitor.VisitUnary reads that Convert node as a real-to-int conversion,
-    /// casting the IntExpr to RealExpr (ExpressionVisitor.cs:132). A second defect waits behind
-    /// it: TypeCode.Int16 marshals to an int, which a short property rejects.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// The case in #63, which had to be fixed twice over. C# widens <c>short</c> to <c>int</c>
+    /// for the comparison, and the visitor read that <c>Convert</c> node as a real-to-int
+    /// conversion and cast the <c>IntExpr</c> to <c>RealExpr</c>; behind that,
+    /// <c>TypeCode.Int16</c> shared the <c>Int32</c> arm of the marshalling switch and handed
+    /// reflection an <c>int</c>, which a <c>short</c> member rejects. Neither defect was
+    /// reachable while the other stood.
     /// </remarks>
     [TestMethod]
-    public void Solve_ShortSymbol_ThrowsInvalidCastException()
+    [DataRow((short)0, DisplayName = "Zero")]
+    [DataRow((short)42, DisplayName = "Positive")]
+    [DataRow((short)-42, DisplayName = "Negative")]
+    [DataRow(short.MaxValue, DisplayName = "Int16.MaxValue")]
+    [DataRow(short.MinValue, DisplayName = "Int16.MinValue")]
+    public void Solve_ShortSymbol_RoundTripsTheValue(short value)
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<Symbols<short, short>>()
-            .Where(t => t.X1 == 7);
+
+        // Act
+        var result = context.NewTheorem<Symbols<short, short>>()
+            .Where(t => t.X1 == value)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(value);
+    }
+
+    /// <summary>
+    /// A <c>short</c> symbol whose model value no <c>short</c> can hold fails loudly.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The symbol is an unbounded <c>MkIntConst</c> - nothing tells Z3 the value has to fit in
+    /// 16 bits - so a constraint written against the widened <c>int</c> can be satisfied by a
+    /// number the member cannot hold. The read is a checked cast, which throws; an unchecked one
+    /// would wrap 40000 to -25536 and hand back a wrong answer that looks like a right one.
+    /// </para>
+    /// <para>
+    /// C# blocks the direct spelling of this - <c>t.X1 == 40000</c> against a <c>short</c> is
+    /// <c>error CS0652</c> - so it takes an <c>int</c> variable to reach. Pinned because the
+    /// choice between wrapping and throwing is the whole point of the arm, and a later
+    /// simplification to a plain cast would pass every other test in this file. See #63, and
+    /// #87 for bounding the symbol so Z3 cannot pick the value in the first place.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_ShortSymbolConstrainedOutsideShortRange_ThrowsOverflowException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        int beyondShortRange = 40000;
+        var theorem = context.NewTheorem<Symbols<short, int>>()
+            .Where(t => t.X1 == beyondShortRange);
 
         // Act & Assert
-        Should.Throw<InvalidCastException>(() => theorem.Solve());
+        Should.Throw<OverflowException>(() => theorem.Solve());
+    }
+
+    /// <summary>
+    /// <c>short</c> symbols work in arithmetic, not only in a bare equality.
+    /// </summary>
+    /// <remarks>
+    /// The fix guards a <c>Convert</c> node, and C# emits one wherever a <c>short</c> is used in
+    /// arithmetic - so a fix that covered only the comparison form would leave this failing.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_ShortSymbolsInArithmetic_RoundTripTheValues()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<short, short>>()
+            .Where(t => t.X1 + t.X2 == 10)
+            .Where(t => t.X1 == 4)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe((short)4);
+        result.X2.ShouldBe((short)6);
+    }
+
+    /// <summary>
+    /// A <c>short</c> symbol can be compared against an <c>int</c> one.
+    /// </summary>
+    /// <remarks>
+    /// Both sides widen to <c>int</c>, so this is the case where the guard has to leave one
+    /// operand alone and still produce a well-sorted comparison.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_ShortSymbolComparedToAnIntSymbol_RoundTripsBoth()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<short, int>>()
+            .Where(t => t.X1 == t.X2)
+            .Where(t => t.X2 == 9)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe((short)9);
+        result.X2.ShouldBe(9);
+    }
+
+    /// <summary>
+    /// An <c>enum</c> symbol round-trips the member it was constrained to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An enum's <c>TypeCode</c> is that of its underlying type, so <see cref="DayOfWeek"/> is
+    /// <c>Int32</c> and takes the same path a <c>short</c> does - which is why the same guard
+    /// fixes both, as #63 records.
+    /// </para>
+    /// <para>
+    /// Unlike <c>short</c>, an enum needs nothing on the marshalling side: the model value is an
+    /// <c>int</c>, and reflection converts an <c>int</c> to an enum member on its own. #63
+    /// predicted a second defect here and there is not one - measured, not assumed.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    [DataRow(DayOfWeek.Sunday, DisplayName = "Underlying value zero")]
+    [DataRow(DayOfWeek.Monday, DisplayName = "Positive")]
+    [DataRow(DayOfWeek.Saturday, DisplayName = "Largest member")]
+    public void Solve_EnumSymbol_RoundTripsTheValue(DayOfWeek value)
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<EnumEnvironment>()
+            .Where(t => t.Day == value)
+            .Where(t => t.Other == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Day.ShouldBe(value);
+        result.Other.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// An explicit <c>(int)</c> cast of a real-sorted symbol still converts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other side of the guard #63 added. That guard makes the <c>Int32</c> arm of the
+    /// conversion switch conditional on the operand's Z3 sort: an integer passes through, a real
+    /// goes to <c>MkReal2Int</c>. Only the first half is exercised by the <c>short</c> and enum
+    /// tests above, so without this one a guard widened to return the operand unconditionally
+    /// would pass the whole suite and silently stop converting reals.
+    /// </para>
+    /// <para>
+    /// Worth knowing that this path had no test before #63 either. It was reachable only from a
+    /// widening the visitor misread, so every execution of it threw - it was covered without
+    /// ever having worked.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DoubleSymbolCastToInt_ConvertsRatherThanPassingThrough()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act: the second constraint is what makes the truncation observable. Z3.s real-to-int
+        // is a floor, so together these ask for a real in (3.5, 4). Pass the operand through
+        // unconverted and they read as X1 == 3 and X1 > 3.5, which has no solution at all - so
+        // this fails by returning null rather than by returning a wrong number.
+        var result = context.NewTheorem<Symbols<double, int>>()
+            .Where(t => (int)t.X1 == 3)
+            .Where(t => t.X1 > 3.5)
+            .Where(t => t.X2 == 1)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBeGreaterThan(3.5);
+        result.X1.ShouldBeLessThan(4d);
+        result.X2.ShouldBe(1);
     }
 
     /// <summary>
@@ -508,18 +675,17 @@ public class SymbolTypeMarshallingTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The tests above pin what each type does with a value; these seven pin what each does with
+    /// The tests above pin what each type does with a value; these eight pin what each does with
     /// no value at all. Every type takes a different arm of the marshalling switch, so each can
     /// regress on its own, and all but <c>bool</c> threw before #51. The value a free symbol
     /// comes back with is supplied by model completion and is deliberately not asserted.
     /// </para>
     /// <para>
-    /// <c>short</c> is absent on purpose: an unconstrained one evaluates cleanly and then fails
-    /// at the reflection write, which is #63 rather than anything to do with completion. Its pin
-    /// above is unchanged. <c>float</c> failed the same way until #54 was fixed, and now has a
-    /// case here like every other working type. <c>DateTime</c> never threw here, but read back
-    /// in local time until #56, so its case asserts the kind rather than only that a result
-    /// appeared.
+    /// Two of the eight could not be written when this family was: <c>float</c> and <c>short</c>
+    /// both evaluated cleanly under completion and then failed at the reflection write, which
+    /// was #54 and #63 rather than anything to do with completion. <c>DateTime</c> never threw
+    /// here, but read back in local time until #56, so its case asserts the kind rather than
+    /// only that a result appeared.
     /// </para>
     /// </remarks>
     [TestMethod]
@@ -661,5 +827,37 @@ public class SymbolTypeMarshallingTests
         // The instant is completion's to choose, but the kind is not: it is fixed by the read
         // path, so it can be asserted where the value cannot.
         result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// An unconstrained <c>short</c> symbol is populated rather than throwing.
+    /// </summary>
+    /// <remarks>
+    /// <c>short</c> could not be in this family until #63: it evaluated cleanly under completion
+    /// and then failed at the reflection write, so its absence here said nothing about
+    /// completion. It takes the <c>Int16</c> arm of the marshalling switch, which no other test
+    /// in this family reaches.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_UnconstrainedShortSymbol_ReturnsAResult()
+    {
+        // Arrange
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<short, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+    }
+
+    private sealed class EnumEnvironment
+    {
+        public DayOfWeek Day { get; set; }
+
+        public int Other { get; set; }
     }
 }

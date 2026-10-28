@@ -117,17 +117,15 @@ public static class ExpressionVisitor
 
         var inner = Visit(context, environment, expression.Operand, param);
 
-        switch (Type.GetTypeCode(expression.Operand.Type))
-        {
-            case TypeCode.Int16:
-            case TypeCode.Int32:
-                break;
-        }
-
         switch (Type.GetTypeCode(expression.Type))
         {
             case TypeCode.Double:
                 return context.MkInt2Real((IntExpr)inner);
+            case TypeCode.Int32 when inner.IsInt:
+                // A widening onto a value Z3 already holds at integer sort is a no-op: short to
+                // int, or an enum to its underlying int. Only a real operand needs converting,
+                // and reading the target type alone cannot tell the two apart. See #63.
+                return inner;
             case TypeCode.Int32:
                 return context.MkReal2Int((RealExpr)inner);
             case TypeCode.Char:

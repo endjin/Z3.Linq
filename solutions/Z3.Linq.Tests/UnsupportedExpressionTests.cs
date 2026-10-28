@@ -114,26 +114,36 @@ public class UnsupportedExpressionTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#63): an enum symbol fails the same way a short does.
+    /// An enum whose underlying type is not one the environment builder maps is rejected by
+    /// name, before anything is translated.
     /// </summary>
     /// <remarks>
-    /// An enum's TypeCode is that of its underlying type, so the symbol is created as an
-    /// integer - and then C# emits a Convert to int for the comparison, which
-    /// ExpressionVisitor.cs:132 reads as a real-to-int conversion and casts to RealExpr. Same
-    /// root cause as short, so the same fix covers both.
-    /// This test pins current behaviour and must be updated when the defect is fixed.
+    /// <para>
+    /// An enum is only ever as supported as its underlying type. #63 fixed the <c>int</c>-backed
+    /// case - <see cref="DayOfWeek"/> and friends - which is now round-tripped in
+    /// <c>SymbolTypeMarshallingTests</c>. A <c>byte</c>-backed enum is <c>TypeCode.Byte</c>,
+    /// which the sort mapping has never handled, so it stops at the same guard that rejects a
+    /// bare <c>byte</c> or <c>uint</c>.
+    /// </para>
+    /// <para>
+    /// This is the outcome #63 asked for where a type genuinely is not supported: a
+    /// <see cref="NotSupportedException"/> naming the member, rather than an
+    /// <see cref="InvalidCastException"/> from inside the visitor. Pinned so the distinction
+    /// between the two enum cases does not quietly collapse.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_EnumProperty_ThrowsInvalidCastException()
+    public void Solve_EnumPropertyWithAnUnsupportedUnderlyingType_ThrowsNotSupportedException()
     {
         // Arrange
         using var context = new Z3Context();
-        var theorem = context.NewTheorem<EnumEnvironment>()
-            .Where(t => t.Day == DayOfWeek.Monday)
+        var theorem = context.NewTheorem<ByteEnumEnvironment>()
+            .Where(t => t.Size == ByteBackedEnum.Large)
             .Where(t => t.Other == 1);
 
         // Act & Assert
-        Should.Throw<InvalidCastException>(() => theorem.Solve());
+        Should.Throw<NotSupportedException>(() => theorem.Solve())
+            .Message.ShouldContain("Size");
     }
 
     [TestMethod]
@@ -188,9 +198,15 @@ public class UnsupportedExpressionTests
         public int Other { get; set; }
     }
 
-    private sealed class EnumEnvironment
+    private enum ByteBackedEnum : byte
     {
-        public DayOfWeek Day { get; set; }
+        Small = 1,
+        Large = 2,
+    }
+
+    private sealed class ByteEnumEnvironment
+    {
+        public ByteBackedEnum Size { get; set; }
 
         public int Other { get; set; }
     }
