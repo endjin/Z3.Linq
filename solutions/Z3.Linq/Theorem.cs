@@ -4,6 +4,7 @@ using Microsoft.Z3;
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -293,11 +294,12 @@ public class Theorem
     {
         var constraintsToAssert = this.constraints;
 
-        // Global rewriter registered?
-        var rewriterAttr = typeof(T).GetCustomAttributes<TheoremGlobalRewriterAttribute>(false).SingleOrDefault();
-
-        if (rewriterAttr != null)
+        // Global rewriter registered? IsDefined answers without allocating, so the common
+        // no-rewriter case pays nothing; the attribute itself is read only when one is present.
+        if (typeof(T).IsDefined(typeof(TheoremGlobalRewriterAttribute), false))
         {
+            var rewriterAttr = typeof(T).GetCustomAttributes<TheoremGlobalRewriterAttribute>(false).Single();
+
             // Make sure the specified rewriter type implements the ITheoremGlobalRewriter.
             var rewriterType = rewriterAttr.RewriterType;
 
@@ -426,9 +428,61 @@ public class Theorem
             _ => throw new NotSupportedException(),
         };
 
-        TheoremVariableTypeMappingAttribute? mapping = type.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault();
+        return GetTypeMapping(type)?.RegularType ?? type;
+    }
 
-        return mapping?.RegularType ?? type;
+    /// <summary>
+    /// The <see cref="TheoremVariableTypeMappingAttribute"/> declared on a type, cached across
+    /// solves.
+    /// </summary>
+    /// <remarks>
+    /// The environment builder, the bounds asserter and the marshaller each ask this of the same
+    /// member types on every solve, and the answer is fixed for the life of the type. Caching it
+    /// turns the common no-mapping case - the great majority of members - from a reflection call
+    /// and an array allocation per member per solve into a dictionary lookup. A type with no
+    /// mapping caches a null, so absence is cached as cheaply as presence.
+    /// </remarks>
+    private static readonly ConcurrentDictionary<Type, TheoremVariableTypeMappingAttribute?> TypeMappings = new();
+
+    /// <summary>
+    /// The <see cref="TheoremVariableTypeMappingAttribute"/> declared on <paramref name="type"/>,
+    /// or <see langword="null"/> if it has none.
+    /// </summary>
+    /// <param name="type">The CLR type to read the mapping from.</param>
+    /// <returns>The mapping attribute, or <see langword="null"/>.</returns>
+    private static TheoremVariableTypeMappingAttribute? GetTypeMapping(Type type)
+    {
+        return TypeMappings.GetOrAdd(
+            type,
+            static t => t.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault());
+    }
+
+    /// <summary>
+    /// The public instance properties of a type, cached across solves.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Type.GetProperties(BindingFlags)"/> hands back a fresh array on every call, so
+    /// the environment builder allocated one per type on every solve to walk the same fixed set of
+    /// members. The cached array is only ever read, never mutated, so sharing one instance is safe.
+    /// </remarks>
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PublicInstanceProperties = new();
+
+    /// <summary>
+    /// The public instance fields of a type, cached across solves, for the same reason as
+    /// <see cref="PublicInstanceProperties"/>.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, FieldInfo[]> PublicInstanceFields = new();
+
+    /// <summary>Gets the cached public instance properties of <paramref name="type"/>.</summary>
+    private static PropertyInfo[] GetPublicInstanceProperties(Type type)
+    {
+        return PublicInstanceProperties.GetOrAdd(type, static t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance));
+    }
+
+    /// <summary>Gets the cached public instance fields of <paramref name="type"/>.</summary>
+    private static FieldInfo[] GetPublicInstanceFields(Type type)
+    {
+        return PublicInstanceFields.GetOrAdd(type, static t => t.GetFields(BindingFlags.Public | BindingFlags.Instance));
     }
 
     /// <summary>
@@ -520,7 +574,7 @@ public class Theorem
             {
                 toReturn.IsArray = true;
 
-                foreach (PropertyInfo parameter in elType!.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                foreach (PropertyInfo parameter in GetPublicInstanceProperties(elType!))
                 {
                     var newPrefix = parameter.Name;
 
@@ -545,7 +599,7 @@ public class Theorem
         }
         else
         {
-            foreach (var parameter in targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var parameter in GetPublicInstanceProperties(targetType))
             {
                 var newPrefix = parameter.Name;
                 if (!string.IsNullOrEmpty(prefix))
@@ -556,7 +610,7 @@ public class Theorem
                 toReturn.Properties[parameter] = GetEnvironment(context, parameter, newPrefix, false);
             }
 
-            foreach (var parameter in targetType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var parameter in GetPublicInstanceFields(targetType))
             {
                 var newPrefix = parameter.Name;
                 if (!string.IsNullOrEmpty(prefix))
@@ -582,11 +636,11 @@ public class Theorem
             _ => throw new NotSupportedException(),
         };
 
-        TheoremVariableTypeMappingAttribute? parameterTypeMapping = parameterType.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault();
+        TheoremVariableTypeMappingAttribute? parameterTypeMapping = GetTypeMapping(parameterType);
 
         if (parameterTypeMapping != null)
-        { 
-            parameterType = parameterTypeMapping.RegularType; 
+        {
+            parameterType = parameterTypeMapping.RegularType;
         }
 
         // Map the environment onto Z3-compatible types.
@@ -638,7 +692,7 @@ public class Theorem
             _ => throw new NotSupportedException(),
         };
 
-        TheoremVariableTypeMappingAttribute? parameterTypeMapping = parameterType.GetCustomAttributes<TheoremVariableTypeMappingAttribute>(false).SingleOrDefault();
+        TheoremVariableTypeMappingAttribute? parameterTypeMapping = GetTypeMapping(parameterType);
 
         if (parameterTypeMapping != null)
         {
@@ -662,8 +716,6 @@ public class Theorem
                     $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
                     nameof(subEnv)));
 
-                var results = new ArrayList();
-
                 // A solution never changes the length of a collection, so the length has to come
                 // from somewhere: the collection on the template passed to NewTheorem, or failing
                 // that the one already on the instance - its initialiser. A value tuple has nowhere
@@ -677,6 +729,11 @@ public class Theorem
                 }
 
                 int existingLength = existing.Count;
+
+                // Fill a typed array in place, rather than an ArrayList that keeps a boxed object[]
+                // backing store and is then copied into a typed array by ToArray. The element values
+                // are still boxed to pass through SetValue, as they were to pass through Add.
+                Array results = Array.CreateInstance(eltType, existingLength);
 
                 for (int i = 0; i < existingLength; i++)
                 {
@@ -746,10 +803,10 @@ public class Theorem
                             throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
                     }
 
-                    results.Add(numVal);
+                    results.SetValue(numVal, i);
                 }
 
-                value = parameterType.IsArray ? results.ToArray(eltType) : Activator.CreateInstance(parameterType, results.ToArray(eltType))!;
+                value = parameterType.IsArray ? results : Activator.CreateInstance(parameterType, results)!;
             }
             else
             {
@@ -936,8 +993,9 @@ public class Theorem
     private static object GetSolution(Type t, Context context, Model model, Environment environment, object? template)
     {
         // Determine whether T is a compiler-generated type, indicating an anonymous type.
-        // This check might not be reliable enough but works for now.
-        if (t.GetCustomAttributes(typeof(CompilerGeneratedAttribute), false).Any())
+        // This check might not be reliable enough but works for now. IsDefined answers the
+        // has-attribute question without materialising the attribute array.
+        if (t.IsDefined(typeof(CompilerGeneratedAttribute), false))
         {
             // Anonymous types have a constructor that takes in values for all its properties.
             // However, we don't know the order and it's hard to correlate back the parameters
