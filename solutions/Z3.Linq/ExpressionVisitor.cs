@@ -220,7 +220,17 @@ public static class ExpressionVisitor
                             foreach (var item in caller)
                             {
                                 var substitutedExpression = ParameterSubstituter.SubstituteParameter(arg, Expression.Constant(item));
-                                var newlyFlattened = PartialEvaluator.PartialEval(substitutedExpression, ExpressionInterpreter.Instance);
+
+                                // SubstituteParameter yields the selector's body, which is not a
+                                // lambda, but from 1.3.0 PartialEval only accepts a LambdaExpression.
+                                // Wrapping the body in a lambda and taking the partially evaluated
+                                // Body back off is the supported equivalent of the overload that
+                                // used to take a bare Expression. The body still references the
+                                // theorem's own parameter, which stays free in the wrapper - the
+                                // evaluator leaves parameter-dependent subtrees alone and folds
+                                // only the closed ones, exactly as before.
+                                var wrappedExpression = Expression.Lambda(substitutedExpression);
+                                var newlyFlattened = PartialEvaluator.PartialEval(wrappedExpression, ExpressionInterpreter.Instance).Body;
                                 subExps.Add(newlyFlattened);
                             }
 
