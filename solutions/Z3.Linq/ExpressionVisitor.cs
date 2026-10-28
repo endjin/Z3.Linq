@@ -326,9 +326,13 @@ public static class ExpressionVisitor
                 // and about half of all cultures render 1.5 as something else. See #52.
                 return context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture));
             case TypeCode.DateTime:
-                // A DateTime is encoded as its position on the UTC timeline. ToFileTimeUtc reads a
-                // Kind of Unspecified as UTC, so that is the convention the read path inverts. See #56.
-                return context.MkInt(((DateTime)val).ToFileTimeUtc());
+                // A DateTime is encoded as its ticks - 100ns intervals from 0001-01-01 - on the UTC
+                // timeline, which covers the whole DateTime range. A Windows file time counted from
+                // 1601 instead, so nothing earlier could be written or read. See #83.
+                //
+                // A Kind of Local is converted to UTC first; Unspecified is taken to be UTC already,
+                // which is the convention ToFileTimeUtc had and the read path inverts. See #56.
+                return context.MkInt(ToUtcTicks((DateTime)val));
             case TypeCode.String:
                 return context.MkString(val.ToString());
             default:
@@ -461,5 +465,20 @@ public static class ExpressionVisitor
     private static Expr VisitUnary(Context context, Environment environment, UnaryExpression expression, ParameterExpression param, Func<Context, Expr, Expr> ctor)
     {
         return ctor(context, Visit(context, environment, expression.Operand, param));
+    }
+    /// <summary>
+    /// The ticks of <paramref name="value"/> on the UTC timeline, which is how a
+    /// <see cref="DateTime"/> is encoded for Z3.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="DateTimeKind.Local"/> value is converted to UTC; an
+    /// <see cref="DateTimeKind.Unspecified"/> one is taken to be UTC already, as
+    /// <see cref="DateTime.ToFileTimeUtc"/> - the previous encoding - did. The read path in
+    /// <c>Theorem</c> produces a <see cref="DateTimeKind.Utc"/> value from the same ticks.
+    /// See #56 and #83.
+    /// </remarks>
+    internal static long ToUtcTicks(DateTime value)
+    {
+        return value.Kind == DateTimeKind.Local ? value.ToUniversalTime().Ticks : value.Ticks;
     }
 }

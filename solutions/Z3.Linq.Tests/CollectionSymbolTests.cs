@@ -423,7 +423,7 @@ public class CollectionSymbolTests
     /// </summary>
     /// <remarks>
     /// <c>DateTime</c> shared the <c>long</c> row of the old mapping and failed the same two ways.
-    /// #56 had already corrected the element read to <c>FromFileTimeUtc</c>, so once the range
+    /// #56 had already corrected the element read to UTC, so once the range
     /// is <c>Int</c> nothing else on this path needs to change - the comment on #64 that
     /// measured exactly that is what this test pins.
     /// </remarks>
@@ -468,13 +468,33 @@ public class CollectionSymbolTests
         result.Values.ShouldBe([instant, instant]);
     }
 
+    [TestMethod]
+    public void Solve_DateTimeArrayElementBefore1601_RoundTripsTheValue()
+    {
+        // Arrange: the element read has its own DateTime arm, so the #83 encoding change has to
+        // hold here as well as for a scalar.
+        using var context = new Z3Context();
+        DateTime instant = new(1500, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // Act
+        var result = context.NewTheorem<DateTimeArrayEnvironment>()
+            .Where(t => t.Values[0] == instant)
+            .Where(t => t.Length == 2)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values[0].ShouldBe(instant);
+        result.Values[0].Kind.ShouldBe(DateTimeKind.Utc);
+    }
+
     /// <summary>
     /// A <c>DateTime</c> collection with free elements reads back as UTC.
     /// </summary>
     /// <remarks>
     /// The instants are completion's to choose and are not asserted - measured, they are
-    /// <c>1601-01-01T00:00:00Z</c>, file time zero, which is the earliest instant the encoding
-    /// can express (#83). The kind is fixed by the read path and can be asserted where the value
+    /// <c>DateTime.MinValue</c> - tick zero, since #83 made the encoding ticks rather than a
+    /// file time counted from 1601. The kind is fixed by the read path and can be asserted where the value
     /// cannot, as the scalar family in <c>SymbolTypeMarshallingTests</c> does.
     /// </remarks>
     [TestMethod]

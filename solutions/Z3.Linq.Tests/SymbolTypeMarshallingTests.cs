@@ -481,10 +481,10 @@ public class SymbolTypeMarshallingTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A DateTime is carried through Z3 as a Windows file time - a position on the UTC timeline -
-    /// so the kind cannot survive the trip and the read path has to choose one. It chooses UTC, to
-    /// match the <c>ToFileTimeUtc</c> the write path already used. Before #56 it chose local time,
-    /// and the same theorem answered differently on every machine that ran it.
+    /// A DateTime is carried through Z3 as an integer - a position on the UTC timeline - so the
+    /// kind cannot survive the trip and the read path has to choose one. It chooses UTC, to match
+    /// the UTC the write path already converted to. Before #56 it chose local time, and the same
+    /// theorem answered differently on every machine that ran it.
     /// </para>
     /// <para>
     /// The kind assertion is the load-bearing one. Comparing ticks alone would have passed on UTC
@@ -516,11 +516,11 @@ public class SymbolTypeMarshallingTests
     /// </summary>
     /// <remarks>
     /// <c>new DateTime(2026, 6, 1, 12, 0, 0)</c> - the ordinary way to write a date into a
-    /// constraint - carries <see cref="DateTimeKind.Unspecified"/>, and the two file-time
-    /// conversions disagree about what that means: <c>ToFileTime</c> reads it as local time,
-    /// <c>ToFileTimeUtc</c> as UTC. The write path uses the second, which is why #56 was fixed on
-    /// the read path: switching the write to <c>ToFileTime</c> instead would have made this shape
-    /// agree while leaving an explicitly-UTC constant, the issue's own repro, still shifted.
+    /// constraint - carries <see cref="DateTimeKind.Unspecified"/>, and a conversion to UTC has
+    /// to decide what that means. The write path takes it as UTC already, the convention the
+    /// file-time encoding it replaced (<c>ToFileTimeUtc</c>) had; the other reading, as local
+    /// time, is what would have made this shape agree before #56 while leaving an explicitly-UTC
+    /// constant, the issue's own repro, still shifted.
     /// </remarks>
     [TestMethod]
     public void Solve_DateTimeSymbolWithNoKind_RoundTripsTheValueAsUtc()
@@ -577,7 +577,7 @@ public class SymbolTypeMarshallingTests
     /// The top of the range, and a case the old read path got right only by luck: converting the
     /// maximum to local time overflows, and <c>ToLocalTime</c> clamps instead of throwing, so east
     /// of Greenwich the ticks happened to match. West of it they did not. Reading as UTC removes
-    /// the conversion, so there is nothing left to clamp. The bottom of the range is #83.
+    /// the conversion, so there is nothing left to clamp. The bottom of the range was #83, below.
     /// </remarks>
     [TestMethod]
     public void Solve_DateTimeSymbolAtMaxValue_RoundTripsTheValue()
@@ -598,57 +598,138 @@ public class SymbolTypeMarshallingTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#83): a DateTime constant before 1601 fails during translation.
+    /// A <see cref="DateTime"/> constant before 1601 round-trips.
     /// </summary>
     /// <remarks>
-    /// A Windows file time counts from 1601-01-01 UTC and cannot express anything earlier, so the
-    /// constant throws out of <c>ToFileTimeUtc</c> before Z3 sees the theorem. Unchanged by #56 -
-    /// the range belongs to the encoding, not to the conversion that inverts it. The null
-    /// <c>ParamName</c> is what identifies this as the write path; the read path supplies one.
+    /// <para>
+    /// The write half of #83. A DateTime used to travel through Z3 as a Windows file time, which
+    /// counts from 1601-01-01 UTC and cannot express anything earlier, so a constant before that
+    /// threw out of <c>ToFileTimeUtc</c> - <c>Not a valid Win32 FileTime</c> - before Z3 saw the
+    /// theorem. Roughly two thirds of the type's range was unusable. It now travels as its ticks,
+    /// which count from 0001-01-01 and cover the whole range.
+    /// </para>
+    /// <para>
+    /// The years are chosen to span the range the old encoding could not express, with
+    /// <see cref="DateTime.MinValue"/> - tick zero - as the boundary case at the bottom.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_DateTimeSymbolBeforeTheFileTimeEpoch_ThrowsArgumentOutOfRangeException()
+    [DataRow(1, DisplayName = "Year 1 - DateTime.MinValue")]
+    [DataRow(1066, DisplayName = "Year 1066")]
+    [DataRow(1500, DisplayName = "Year 1500")]
+    [DataRow(1600, DisplayName = "Year 1600 - the last the file time could not express")]
+    public void Solve_DateTimeSymbolBefore1601_RoundTripsTheValue(int year)
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var instant = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 == instant)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+        result.X1.ShouldBe(instant);
+    }
+
+    [TestMethod]
+    public void Solve_DateTimeSymbolOneTickBefore1601_RoundTripsTheValue()
+    {
+        // Arrange: the exact boundary of the old encoding, from the wrong side of it.
+        using var context = new Z3Context();
+        var instant = new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(-1);
+
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 == instant)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(instant);
+    }
+
+    /// <summary>
+    /// A satisfiable theorem whose only models lie before 1601 returns one of them.
+    /// </summary>
+    /// <remarks>
+    /// The read half of #83, and the worse one: nothing here was malformed. The constraints were
+    /// well-formed, Z3 found a model, and the read path then refused to express it - every model
+    /// was a negative file time, and the exception blamed a <c>fileTime</c> parameter no caller
+    /// had supplied. Which instant comes back is Z3's choice; that it lies before 1601 is not.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolConstrainedBefore1601_ReturnsAnInstantBefore1601()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var epoch = new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 < epoch && t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+        result.X1.ShouldBeLessThan(epoch);
+    }
+
+    /// <summary>
+    /// A <see cref="DateTime"/> symbol whose model value no <see cref="DateTime"/> can hold fails
+    /// loudly, naming the symbol.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The symbol is an unbounded integer, so <c>t.X1 &gt; DateTime.MaxValue</c> - which has no
+    /// solution in <see cref="DateTime"/> terms - is satisfiable in Z3's integers, and the model
+    /// is a tick count beyond the type. The read path used to hand that to
+    /// <c>FromFileTimeUtc</c> and let it throw about a <c>fileTime</c> parameter; it now checks
+    /// the range itself and says which symbol and what the range is. The same trade-off as the
+    /// checked read of a <c>short</c>: loud rather than wrong, until #87 bounds the symbol so
+    /// Z3 cannot choose such a value at all.
+    /// </para>
+    /// <para>
+    /// Both ends are pinned. The bottom is the case #83 reported as the read-side failure, and
+    /// with the encoding now starting at tick zero it is only reachable by constraining below
+    /// <see cref="DateTime.MinValue"/> itself.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolConstrainedBeyondMaxValue_ThrowsOverflowExceptionNamingIt()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        DateTime max = DateTime.MaxValue;
+        var theorem = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 > max && t.X2 == 0);
+
+        // Act
+        OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldContain("X1");
+        exception.Message.ShouldContain("0001-01-01 to 9999-12-31");
+    }
+
+    [TestMethod]
+    public void Solve_DateTimeSymbolConstrainedBelowMinValue_ThrowsOverflowExceptionNamingIt()
     {
         // Arrange
         using var context = new Z3Context();
         DateTime min = DateTime.MinValue;
         var theorem = context.NewTheorem<Symbols<DateTime, int>>()
-            .Where(t => t.X1 == min);
+            .Where(t => t.X1 < min && t.X2 == 0);
 
         // Act
-        ArgumentOutOfRangeException exception =
-            Should.Throw<ArgumentOutOfRangeException>(() => theorem.Solve());
+        OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
 
         // Assert
-        exception.ParamName.ShouldBeNull();
-    }
-
-    /// <summary>
-    /// KNOWN DEFECT (#83): a satisfiable theorem whose only models lie before 1601 throws while
-    /// its solution is being marshalled.
-    /// </summary>
-    /// <remarks>
-    /// The other half of #83, and the worse one: nothing here is malformed. The constraints are
-    /// well-formed, Z3 finds a model, and the read path then refuses to express it. Every model
-    /// satisfying this theorem is a negative file time, so the throw does not depend on which one
-    /// Z3 picks. <c>ParamName</c> distinguishes this from the write-side case above, so a fix to
-    /// one half cannot pass as a fix to both.
-    /// </remarks>
-    [TestMethod]
-    public void Solve_DateTimeSymbolConstrainedBeforeTheFileTimeEpoch_ThrowsArgumentOutOfRangeException()
-    {
-        // Arrange
-        using var context = new Z3Context();
-        var epoch = new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var theorem = context.NewTheorem<Symbols<DateTime, int>>()
-            .Where(t => t.X1 < epoch && t.X2 == 0);
-
-        // Act
-        ArgumentOutOfRangeException exception =
-            Should.Throw<ArgumentOutOfRangeException>(() => theorem.Solve());
-
-        // Assert
-        exception.ParamName.ShouldBe("fileTime");
+        exception.Message.ShouldContain("X1");
     }
 
     [TestMethod]
@@ -810,9 +891,10 @@ public class SymbolTypeMarshallingTests
     [TestMethod]
     public void Solve_UnconstrainedDateTimeSymbol_ReturnsAResult()
     {
-        // Arrange: DateTime shares the integer sort with long but has its own read-back through
-        // the file-time encoding, which can only express 1601 onwards - so completion has to
-        // supply a value that encoding can carry, not merely an integer.
+        // Arrange: DateTime shares the integer sort with long but has its own read-back, from
+        // ticks, so completion has to supply a value the type can carry, not merely an integer.
+        // Measured, it supplies zero - DateTime.MinValue; it was 1601-01-01 while the encoding
+        // was a file time (#83). Neither is asserted.
         using var context = new Z3Context();
 
         // Act
