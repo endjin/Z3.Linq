@@ -22,12 +22,26 @@ public class Theorem<T> : Theorem, ISolveable<T>
     }
 
     /// <summary>
+    /// Creates a new theorem for the given Z3 context, from a template instance.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="template">
+    /// An instance of <typeparamref name="T"/> whose collections supply a length to the
+    /// solution's. See #78.
+    /// </param>
+    internal Theorem(Z3Context context, T template)
+        : base(context, new List<LambdaExpression>(), template)
+    {
+    }
+
+    /// <summary>
     /// Creates a new pre-constrained theorem for the given Z3 context.
     /// </summary>
     /// <param name="context">Z3 context.</param>
     /// <param name="constraints">Constraints to apply to the created theorem.</param>
-    internal Theorem(Z3Context context, IEnumerable<LambdaExpression> constraints)
-        : base(context, constraints)
+    /// <param name="template">The template instance of the theorem being extended, or null.</param>
+    internal Theorem(Z3Context context, IEnumerable<LambdaExpression> constraints, object? template)
+        : base(context, constraints, template)
     {
     }
 
@@ -128,7 +142,7 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// <returns>Theorem with the new constraint applied.</returns>
     public Theorem<T> Where(Expression<Func<T, bool>> constraint)
     {
-        return new Theorem<T>(base.Context, base.Constraints.Concat(new List<LambdaExpression> { constraint }));
+        return new Theorem<T>(base.Context, base.Constraints.Concat(new List<LambdaExpression> { constraint }), base.Template);
     }
 
     /// <summary>

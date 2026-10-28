@@ -165,10 +165,11 @@ public class TheoremCompositionTests
     }
 
     [TestMethod]
-    public void NewTheorem_WithDummyInstance_InfersTheEnvironmentType()
+    public void NewTheorem_WithATemplateInstance_InfersTheEnvironmentType()
     {
-        // Arrange: the dummy overload exists so anonymous types can be used inline
-        // (Z3Context.cs:69). The instance itself is never read.
+        // Arrange: the instance overload exists so anonymous types can be used inline. Since #78
+        // the instance is also the template for the solution, but only the lengths of its
+        // collections are read; with none, as here, it does nothing but supply the type.
         using var context = new Z3Context();
 
         // Act
