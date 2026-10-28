@@ -375,4 +375,41 @@ public class OptimizationTests
         result.ShouldNotBeNull();
         result.X1.ShouldBe(5);
     }
+
+    /// <summary>
+    /// An optimisation over a <see cref="DateTime"/> symbol returns the latest instant in range.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A DateTime is encoded as an integer file time, so ordering it is ordering that integer -
+    /// which is only the same thing as ordering the instants because every constant on the way in
+    /// is converted the same way, whatever kind it carried. This test puts one bound in local time
+    /// and one in UTC to say so: they are half an hour apart on the timeline, not the seven-and-a-
+    /// half hours their wall-clock readings suggest in some zones.
+    /// </para>
+    /// <para>
+    /// The range is closed, so the maximum is exactly the upper bound and can be asserted
+    /// outright. That the answer comes back as UTC is #56; that it is the right instant is what
+    /// this file is for.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void OrderByDescending_DateTimeSymbolInAClosedRange_ReturnsTheLatestInstant()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var earliest = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Local);
+        DateTime latest = earliest.ToUniversalTime().AddMinutes(30);
+
+        // Act
+        var result = (from t in context.NewTheorem<Symbols<DateTime, int>>()
+                      where t.X1 >= earliest && t.X1 <= latest && t.X2 == 0
+                      orderby t.X1 descending
+                      select t).Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldBe(latest);
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+    }
 }

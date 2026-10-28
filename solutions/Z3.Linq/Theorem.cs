@@ -462,7 +462,8 @@ public class Theorem
                             numVal = ((IntNum)numValExpr).Int64;
                             break;
                         case TypeCode.DateTime:
-                            numVal = DateTime.FromFileTime(((IntNum)numValExpr).Int64);
+                            // FromFileTimeUtc, for the reason given on the scalar arm below. See #56.
+                            numVal = DateTime.FromFileTimeUtc(((IntNum)numValExpr).Int64);
                             break;
                         case TypeCode.Boolean:
                             numVal = numValExpr.IsTrue;
@@ -521,7 +522,11 @@ public class Theorem
                     value = ((IntNum)val).Int64;
                     break;
                 case TypeCode.DateTime:
-                    value = DateTime.FromFileTime(((IntNum)val).Int64);
+                    // The write path encodes the instant with ToFileTimeUtc (ExpressionVisitor.cs:311),
+                    // whose inverse is FromFileTimeUtc. FromFileTime converts to local time, which
+                    // shifts the value by the machine's UTC offset and makes the same theorem answer
+                    // differently on different machines. See #56.
+                    value = DateTime.FromFileTimeUtc(((IntNum)val).Int64);
                     break;
                 case TypeCode.Boolean:
                     value = val.IsTrue;

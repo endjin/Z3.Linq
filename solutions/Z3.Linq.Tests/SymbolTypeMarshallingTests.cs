@@ -11,10 +11,11 @@ namespace Z3.Linq.Tests;
 /// which solution was chosen.
 /// </para>
 /// <para>
-/// Two of the types listed as supported do not work, and are pinned as characterisation tests
-/// rather than skipped - short (#63) and DateTime (#56). Both fail in the marshalling layer,
-/// which no example in the repository exercises, which is why they went unnoticed. float was a
-/// third until #54 was fixed.
+/// One of the types listed as supported still does not work, and is pinned as a characterisation
+/// test rather than skipped - short (#63). It fails in the marshalling layer, which no example in
+/// the repository exercises, which is why it went unnoticed. float was a second until #54 was
+/// fixed, and DateTime a third until #56 - that one returned a value rather than throwing, so it
+/// took a test asserting the value to find it at all.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -309,18 +310,24 @@ public class SymbolTypeMarshallingTests
     }
 
     /// <summary>
-    /// KNOWN DEFECT (#56): a DateTime does not compare equal to the value put in.
+    /// A <see cref="DateTime"/> symbol round-trips: what comes back equals what went in, as UTC.
     /// </summary>
     /// <remarks>
-    /// The instant itself survives - the value is written with ToFileTimeUtc and read with
-    /// DateTime.FromFileTime, which is its correct inverse for the instant - but the result
-    /// comes back as <see cref="DateTimeKind.Local"/>. Since <see cref="DateTime"/> equality
-    /// compares ticks and ignores Kind, a caller comparing the result against the UTC value it
-    /// supplied gets false anywhere with a non-zero UTC offset. Asserted in a form that holds in
-    /// any time zone, including UTC where the offset is zero and the shift vanishes.
+    /// <para>
+    /// A DateTime is carried through Z3 as a Windows file time - a position on the UTC timeline -
+    /// so the kind cannot survive the trip and the read path has to choose one. It chooses UTC, to
+    /// match the <c>ToFileTimeUtc</c> the write path already used. Before #56 it chose local time,
+    /// and the same theorem answered differently on every machine that ran it.
+    /// </para>
+    /// <para>
+    /// The kind assertion is the load-bearing one. Comparing ticks alone would have passed on UTC
+    /// CI both before and after the fix, because the shift is the machine's UTC offset and that
+    /// offset is zero there - which is how the defect survived a green build for so long. The kind
+    /// was wrong in every zone, UTC included.
+    /// </para>
     /// </remarks>
     [TestMethod]
-    public void Solve_DateTimeSymbol_ReturnsTheSameInstantAsLocalTime()
+    public void Solve_DateTimeSymbol_RoundTripsTheValueAsUtc()
     {
         // Arrange
         using var context = new Z3Context();
@@ -333,15 +340,148 @@ public class SymbolTypeMarshallingTests
 
         // Assert
         result.ShouldNotBeNull();
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+        result.X1.ShouldBe(utc);
+    }
 
-        // The instant is preserved...
-        result.X1.Kind.ShouldBe(DateTimeKind.Local);
-        result.X1.ToUniversalTime().ShouldBe(utc);
+    /// <summary>
+    /// A DateTime constant with no kind is read as UTC, not as local time.
+    /// </summary>
+    /// <remarks>
+    /// <c>new DateTime(2026, 6, 1, 12, 0, 0)</c> - the ordinary way to write a date into a
+    /// constraint - carries <see cref="DateTimeKind.Unspecified"/>, and the two file-time
+    /// conversions disagree about what that means: <c>ToFileTime</c> reads it as local time,
+    /// <c>ToFileTimeUtc</c> as UTC. The write path uses the second, which is why #56 was fixed on
+    /// the read path: switching the write to <c>ToFileTime</c> instead would have made this shape
+    /// agree while leaving an explicitly-UTC constant, the issue's own repro, still shifted.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolWithNoKind_RoundTripsTheValueAsUtc()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var unspecified = new DateTime(2026, 6, 1, 12, 0, 0);
 
-        // ...but the value is shifted by the local UTC offset, so a direct comparison against
-        // what went in only succeeds where that offset happens to be zero.
-        TimeSpan offset = TimeZoneInfo.Local.GetUtcOffset(utc);
-        result.X1.Ticks.ShouldBe(utc.Ticks + offset.Ticks);
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 == unspecified)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+        result.X1.Ticks.ShouldBe(unspecified.Ticks);
+    }
+
+    /// <summary>
+    /// A local DateTime comes back as the same instant, expressed in UTC.
+    /// </summary>
+    /// <remarks>
+    /// The one shape #56 changed rather than repaired. A local constant used to come back as local
+    /// time with identical ticks - the single case the old read path got right - and now comes back
+    /// as UTC, so a caller comparing the result against what it supplied gets false where it used
+    /// to get true. The instant is the same either way and one <see cref="DateTime.ToLocalTime"/>
+    /// recovers the old answer. The trade is deliberate: only one kind can be exact, and choosing
+    /// UTC is what makes the result independent of the machine that computed it.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolWithLocalKind_ReturnsTheSameInstantAsUtc()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var local = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Local);
+
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 == local)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+        result.X1.ShouldBe(local.ToUniversalTime());
+        result.X1.ToLocalTime().ShouldBe(local);
+    }
+
+    /// <summary>
+    /// <see cref="DateTime.MaxValue"/> survives the round trip.
+    /// </summary>
+    /// <remarks>
+    /// The top of the range, and a case the old read path got right only by luck: converting the
+    /// maximum to local time overflows, and <c>ToLocalTime</c> clamps instead of throwing, so east
+    /// of Greenwich the ticks happened to match. West of it they did not. Reading as UTC removes
+    /// the conversion, so there is nothing left to clamp. The bottom of the range is #83.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolAtMaxValue_RoundTripsTheValue()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        DateTime max = DateTime.MaxValue;
+
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 == max)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
+        result.X1.ShouldBe(max);
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#83): a DateTime constant before 1601 fails during translation.
+    /// </summary>
+    /// <remarks>
+    /// A Windows file time counts from 1601-01-01 UTC and cannot express anything earlier, so the
+    /// constant throws out of <c>ToFileTimeUtc</c> before Z3 sees the theorem. Unchanged by #56 -
+    /// the range belongs to the encoding, not to the conversion that inverts it. The null
+    /// <c>ParamName</c> is what identifies this as the write path; the read path supplies one.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolBeforeTheFileTimeEpoch_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        DateTime min = DateTime.MinValue;
+        var theorem = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 == min);
+
+        // Act
+        ArgumentOutOfRangeException exception =
+            Should.Throw<ArgumentOutOfRangeException>(() => theorem.Solve());
+
+        // Assert
+        exception.ParamName.ShouldBeNull();
+    }
+
+    /// <summary>
+    /// KNOWN DEFECT (#83): a satisfiable theorem whose only models lie before 1601 throws while
+    /// its solution is being marshalled.
+    /// </summary>
+    /// <remarks>
+    /// The other half of #83, and the worse one: nothing here is malformed. The constraints are
+    /// well-formed, Z3 finds a model, and the read path then refuses to express it. Every model
+    /// satisfying this theorem is a negative file time, so the throw does not depend on which one
+    /// Z3 picks. <c>ParamName</c> distinguishes this from the write-side case above, so a fix to
+    /// one half cannot pass as a fix to both.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_DateTimeSymbolConstrainedBeforeTheFileTimeEpoch_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var epoch = new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var theorem = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X1 < epoch && t.X2 == 0);
+
+        // Act
+        ArgumentOutOfRangeException exception =
+            Should.Throw<ArgumentOutOfRangeException>(() => theorem.Solve());
+
+        // Assert
+        exception.ParamName.ShouldBe("fileTime");
     }
 
     [TestMethod]
@@ -368,7 +508,7 @@ public class SymbolTypeMarshallingTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The tests above pin what each type does with a value; these six pin what each does with
+    /// The tests above pin what each type does with a value; these seven pin what each does with
     /// no value at all. Every type takes a different arm of the marshalling switch, so each can
     /// regress on its own, and all but <c>bool</c> threw before #51. The value a free symbol
     /// comes back with is supplied by model completion and is deliberately not asserted.
@@ -377,7 +517,9 @@ public class SymbolTypeMarshallingTests
     /// <c>short</c> is absent on purpose: an unconstrained one evaluates cleanly and then fails
     /// at the reflection write, which is #63 rather than anything to do with completion. Its pin
     /// above is unchanged. <c>float</c> failed the same way until #54 was fixed, and now has a
-    /// case here like every other working type.
+    /// case here like every other working type. <c>DateTime</c> never threw here, but read back
+    /// in local time until #56, so its case asserts the kind rather than only that a result
+    /// appeared.
     /// </para>
     /// </remarks>
     [TestMethod]
@@ -497,5 +639,27 @@ public class SymbolTypeMarshallingTests
         // Assert
         result.ShouldNotBeNull();
         result.X2.ShouldBe(0);
+    }
+
+    [TestMethod]
+    public void Solve_UnconstrainedDateTimeSymbol_ReturnsAResult()
+    {
+        // Arrange: DateTime shares the integer sort with long but has its own read-back through
+        // the file-time encoding, which can only express 1601 onwards - so completion has to
+        // supply a value that encoding can carry, not merely an integer.
+        using var context = new Z3Context();
+
+        // Act
+        var result = context.NewTheorem<Symbols<DateTime, int>>()
+            .Where(t => t.X2 == 0)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X2.ShouldBe(0);
+
+        // The instant is completion's to choose, but the kind is not: it is fixed by the read
+        // path, so it can be asserted where the value cannot.
+        result.X1.Kind.ShouldBe(DateTimeKind.Utc);
     }
 }

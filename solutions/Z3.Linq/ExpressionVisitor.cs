@@ -306,6 +306,8 @@ public static class ExpressionVisitor
                 // and about half of all cultures render 1.5 as something else. See #52.
                 return context.MkReal(((IFormattable)val).ToString(null, CultureInfo.InvariantCulture));
             case TypeCode.DateTime:
+                // A DateTime is encoded as its position on the UTC timeline. ToFileTimeUtc reads a
+                // Kind of Unspecified as UTC, so that is the convention the read path inverts. See #56.
                 return context.MkInt(((DateTime)val).ToFileTimeUtc());
             case TypeCode.String:
                 return context.MkString(val.ToString());
