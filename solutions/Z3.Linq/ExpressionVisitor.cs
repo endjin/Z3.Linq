@@ -178,10 +178,11 @@ internal sealed class ExpressionVisitor
         // A numeric conversion the compiler inserted, or the caller wrote, means one of three
         // things in Z3, and which one depends on the sorts involved rather than on the CLR
         // types: nothing at all when both types map to the same sort (short to int, int to
-        // long, float to double, a cast that only narrows); integer-to-real when the operand is
-        // an integer and the target a real (int to double, int to decimal); real-to-integer the
-        // other way round. The target sort comes from the same mapping the symbols are declared
-        // with, so a conversion can never disagree with a symbol about what a type is.
+        // long, float to double), except that a cast narrowing one integer type to another
+        // wraps; integer-to-real when the operand is an integer and the target a real (int to
+        // double, int to decimal); real-to-integer the other way round. The target sort comes
+        // from the same mapping the symbols are declared with, so a conversion can never
+        // disagree with a symbol about what a type is.
         //
         // This used to be a switch on the target type alone, which assumed the operand sort from
         // it - int-to-real for every conversion to double, real-to-int for every conversion to
@@ -192,9 +193,21 @@ internal sealed class ExpressionVisitor
 
         if (targetSort is not null)
         {
+            // A conversion that calls an operator method runs C# the visitor cannot see into, so
+            // translating it from the sorts alone would drop whatever the operator does. Decimal's
+            // built-in conversions are operator methods on decimal too, and are the numeric
+            // conversions translated here; any other operator is refused.
+            if (expression.Method is { } method && method.DeclaringType != typeof(decimal))
+            {
+                throw new NotSupportedException(
+                    $"The conversion '{expression}' calls the user-defined operator {method.DeclaringType}.{method.Name}, which cannot be translated: only built-in numeric conversions are supported.");
+            }
+
             if (inner.Sort.Equals(targetSort))
             {
-                return inner;
+                return inner is IntExpr intInner
+                    ? WrapIntoRange(intInner, expression.Operand.Type, expression.Type)
+                    : inner;
             }
 
             if (inner.IsInt && targetSort is RealSort)
@@ -206,9 +219,76 @@ internal sealed class ExpressionVisitor
             {
                 return this.context.MkReal2Int((RealExpr)inner);
             }
+
+            // Between the two bit-vector widths, uint and ulong. Both are unsigned, so widening
+            // zero-extends, and an explicit narrowing cast keeps the low bits, as an unchecked C#
+            // cast does.
+            if (inner is BitVecExpr bvInner && targetSort is BitVecSort bvTarget)
+            {
+                return bvTarget.Size > bvInner.SortSize
+                    ? this.context.MkZeroExt(bvTarget.Size - bvInner.SortSize, bvInner)
+                    : this.context.MkExtract(bvTarget.Size - 1, 0, bvInner);
+            }
         }
 
         throw new NotImplementedException($"Cast '{expression.Operand} ({expression.Operand.Type})' to {expression.Type}");
+    }
+
+    /// <summary>
+    /// Wraps an integer-sorted value into the range of the conversion's target type, as an
+    /// unchecked C# conversion between integer types does.
+    /// </summary>
+    /// <param name="value">The translated operand.</param>
+    /// <param name="from">The operand's CLR type.</param>
+    /// <param name="to">The conversion's target CLR type.</param>
+    /// <returns><paramref name="value"/> unchanged for a widening conversion; otherwise the value
+    /// wrapped into the target's range.</returns>
+    /// <remarks>
+    /// Every integer CLR type except <c>uint</c> and <c>ulong</c> is an unbounded integer in Z3,
+    /// so a narrowing cast such as <c>(int)</c> of a <c>long</c> changes nothing about the sort,
+    /// but C# keeps only the low bits: <c>(int)4294967295L</c> is -1. With a target range of
+    /// size <c>n</c> starting at <c>low</c>, the wrapped value is
+    /// <c>((value - low) mod n) + low</c>. Z3's <c>mod</c> by a positive constant is never
+    /// negative, so this covers signed and unsigned targets and negative operands alike. A
+    /// <c>checked</c> conversion is a different node type, which is not translated.
+    /// </remarks>
+    private Expr WrapIntoRange(IntExpr value, Type from, Type to)
+    {
+        // A long target holds every integer source, and its range has no size that fits in a long.
+        if (IntegerRange(to) is not (long low, long high) || (low == long.MinValue && high == long.MaxValue))
+        {
+            return value;
+        }
+
+        if (IntegerRange(from) is (long fromLow, long fromHigh) && fromLow >= low && fromHigh <= high)
+        {
+            return value;
+        }
+
+        IntExpr size = this.context.MkInt(high - low + 1);
+
+        if (low == 0)
+        {
+            return this.context.MkMod(value, size);
+        }
+
+        IntExpr lowExpr = this.context.MkInt(low);
+        IntExpr shifted = (IntExpr)this.context.MkSub(value, lowExpr);
+
+        return this.context.MkAdd(this.context.MkMod(shifted, size), lowExpr);
+    }
+
+    /// <summary>
+    /// The range of an integer CLR type that travels through Z3 as an integer, or
+    /// <see langword="null"/> for any other type.
+    /// </summary>
+    /// <param name="type">The CLR type; an enum gives its underlying type's range.</param>
+    /// <returns>The inclusive range, or <see langword="null"/>.</returns>
+    private static (long Low, long High)? IntegerRange(Type type)
+    {
+        return type == typeof(char)
+            ? (char.MinValue, char.MaxValue)
+            : Type.GetTypeCode(type) is TypeCode.DateTime ? null : Theorem.GetBounds(Type.GetTypeCode(type));
     }
 
     /// <summary>
@@ -235,15 +315,30 @@ internal sealed class ExpressionVisitor
     /// <c>long</c> or real symbol carries mathematical arithmetic. Both operands share a sort,
     /// since C# would not compile a mixed expression without a conversion, which
     /// <see cref="VisitConvert"/> handles first.
+    /// <para>
+    /// A <c>checked</c> operator on bit-vectors is refused. The bit-vector form wraps, so a
+    /// translation would return a wrapped model for a predicate that C# evaluates by throwing
+    /// <see cref="OverflowException"/>, which is a solution the caller could not have got by
+    /// running the predicate.
+    /// </para>
     /// </remarks>
     private Expr VisitArithmetic(BinaryExpression expression, Func<Context, ArithExpr, ArithExpr, ArithExpr> arith, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bv)
     {
         Expr left = Visit(expression.Left);
         Expr right = Visit(expression.Right);
 
-        return left is BitVecExpr bvLeft
-            ? bv(this.context, bvLeft, (BitVecExpr)right)
-            : arith(this.context, (ArithExpr)left, (ArithExpr)right);
+        if (left is not BitVecExpr bvLeft)
+        {
+            return arith(this.context, (ArithExpr)left, (ArithExpr)right);
+        }
+
+        if (expression.NodeType is ExpressionType.AddChecked or ExpressionType.SubtractChecked or ExpressionType.MultiplyChecked)
+        {
+            throw new NotSupportedException(
+                $"A checked '{expression.NodeType}' on bit-vector (uint/ulong) symbols is not supported: bit-vector arithmetic wraps, and overflow checking is not translated. Remove the checked context to solve with wrapping arithmetic.");
+        }
+
+        return bv(this.context, bvLeft, (BitVecExpr)right);
     }
 
     /// <summary>
@@ -310,6 +405,13 @@ internal sealed class ExpressionVisitor
     /// C# types the shift amount as <c>int</c>, so the right operand translates to an integer and
     /// is converted to a bit-vector of the value's width before the shift. Only a bit-vector value
     /// can be shifted; Z3's integer sort has no shift.
+    /// <para>
+    /// C# uses only the low bits of the count: five for a <c>uint</c>, six for a <c>ulong</c>, so
+    /// <c>x &lt;&lt; 32</c> on a <c>uint</c> is <c>x</c>, and a negative count shifts by its low
+    /// bits too. Z3 shifts by the whole count, and anything at or beyond the width gives 0, so the
+    /// count is masked with the width minus one before the shift. The conversion to a bit-vector
+    /// is modulo 2^width, so a negative count reaches the mask in two's complement, as it does in C#.
+    /// </para>
     /// </remarks>
     private Expr VisitShift(BinaryExpression expression, string op, Func<Context, BitVecExpr, BitVecExpr, BitVecExpr> bvOp)
     {
@@ -322,8 +424,9 @@ internal sealed class ExpressionVisitor
         }
 
         BitVecExpr bvAmount = amount as BitVecExpr ?? this.context.MkInt2BV(bvValue.SortSize, (IntExpr)amount);
+        BitVecExpr maskedAmount = this.context.MkBVAND(bvAmount, this.context.MkBV(bvValue.SortSize - 1, bvValue.SortSize));
 
-        return bvOp(this.context, bvValue, bvAmount);
+        return bvOp(this.context, bvValue, maskedAmount);
     }
 
     /// <summary>

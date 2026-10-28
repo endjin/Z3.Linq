@@ -8,6 +8,18 @@ No project, no solution entry - just run the file:
 dotnet run demos/sudoku.cs
 ```
 
+On a clean clone, populate the local `Microsoft.Z3` package feed first, from the repository root:
+
+```bash
+pwsh -File scripts/Install-Z3Package.ps1
+```
+
+The `Microsoft.Z3` version the library needs is not on nuget.org, so restore can only find it in
+the repository's `_z3-feed` folder. The build script fills that folder automatically, but
+`dotnet run` does not run the build script, so without this step the first run fails with
+`NU1102: Unable to find package Microsoft.Z3`. The script does nothing if the package is already
+there, so it is safe to run again.
+
 The first run of a file restores its packages and builds it; later runs are fast. Each file
 declares its own dependencies at the top (`#:package Spectre.Console`, `#:project ...` to the
 `Z3.Linq` and `Z3.Linq.Examples` projects in [`../solutions`](../solutions)), so they build against

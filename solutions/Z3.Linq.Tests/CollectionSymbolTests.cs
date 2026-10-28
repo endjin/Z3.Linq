@@ -1127,6 +1127,36 @@ public class CollectionSymbolTests
     }
 
     /// <summary>
+    /// A scalar member's getter on the template is never called.
+    /// </summary>
+    /// <remarks>
+    /// The template supplies only lengths, for collections and the collections of nested
+    /// environments, so a scalar member's value on it is of no use. Reading it anyway runs a getter
+    /// that may throw or have side effects, and makes such a getter fail a solve that only needs
+    /// its setter.
+    /// </remarks>
+    [TestMethod]
+    public void Solve_TemplateWithAScalarMember_DoesNotReadTheScalarGetter()
+    {
+        // Arrange
+        using var context = new Z3Context();
+        var template = new WatchedScalarEnvironment { Values = new int[2] };
+
+        // Act
+        var result = context.NewTheorem(template)
+            .Where(t => t.Values[1] == 3)
+            .Where(t => t.Watched == 7)
+            .Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.Values.Length.ShouldBe(2);
+        result.Values[1].ShouldBe(3);
+        result.Watched.ShouldBe(7);
+        template.WatchedReads.ShouldBe(0);
+    }
+
+    /// <summary>
     /// The template survives <c>Where</c> and <c>OrderBy</c>.
     /// </summary>
     /// <remarks>
@@ -1215,6 +1245,27 @@ public class CollectionSymbolTests
         public int[] Values { get; set; } = new int[3];
 
         public int Length { get; set; }
+    }
+
+    private sealed class WatchedScalarEnvironment
+    {
+        private int watched;
+
+        public int[] Values { get; set; } = [];
+
+        public int Watched
+        {
+            get
+            {
+                this.WatchedReads++;
+                return this.watched;
+            }
+
+            set => this.watched = value;
+        }
+
+        // Not public, so not a symbol: the library walks public instance members only.
+        internal int WatchedReads { get; private set; }
     }
 
     private sealed class IntListEnvironment

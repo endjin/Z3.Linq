@@ -1,5 +1,7 @@
 namespace Z3.Linq.Benchmarks;
 
+using System.Linq.Expressions;
+
 using BenchmarkDotNet.Attributes;
 
 using Z3.Linq;
@@ -35,6 +37,11 @@ public class SolveBenchmarks
     private Theorem<CollectionEnvironment> collection = null!;
     private Theorem<Symbols<int, int, int, int, int>> wide = null!;
     private Theorem<Symbols<int, int>> optimizeSource = null!;
+
+    // Optimize takes an expression tree, so a lambda written inline in the benchmark would build a
+    // new tree on every invocation and count that construction against the solve. Built once here,
+    // like the constraints in Setup.
+    private readonly Expression<Func<Symbols<int, int>, int>> optimizeObjective = t => t.X1;
 
     [GlobalSetup]
     public void Setup()
@@ -115,7 +122,7 @@ public class SolveBenchmarks
     [Benchmark]
     public Symbols<int, int>? Optimize()
     {
-        return this.optimizeSource.Optimize(Optimization.Maximize, t => t.X1);
+        return this.optimizeSource.Optimize(Optimization.Maximize, this.optimizeObjective);
     }
 
     private sealed class NestedEnvironment
