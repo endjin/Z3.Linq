@@ -1,6 +1,9 @@
-﻿namespace Z3.Linq;
- 
+namespace Z3.Linq;
+
 using Microsoft.Z3;
+
+using MiaPlaza.ExpressionUtils;
+using MiaPlaza.ExpressionUtils.Evaluating;
 
 using System;
 using System.Collections;
@@ -81,6 +84,16 @@ public class Theorem
     /// Gets the Z3 context under which the theorem is solved.
     /// </summary>
     protected Z3Context Context => context;
+
+    /// <summary>
+    /// Controls how collection (array/IEnumerable) properties are modeled in Z3.
+    /// <list type="bullet">
+    /// <item><term>Array</term><description>Z3 array theory: a single <c>ArrayExpr</c> with <c>Select</c>/<c>Store</c> (supports nested <c>int[][]</c>).</description></item>
+    /// <item><term>Constants</term><description>One Z3 constant per element, created lazily on index access via <see cref="MultipleEnvironment"/> (the classic endjin binding model).</description></item>
+    /// </list>
+    /// Default is <see cref="CollectionHandling.Array"/> to preserve existing behavior (incl. nested-array support).
+    /// </summary>
+    public CollectionHandling DefaultCollectionHandling { get; set; } = CollectionHandling.Array;
 
     /// <summary>
     /// Returns a comma-separated representation of the constraints embodied in the theorem.
@@ -317,7 +330,16 @@ public class Theorem
         // Visit, assert and log.
         foreach (var constraint in constraintsToAssert)
         {
-            BoolExpr expression = (BoolExpr)ExpressionVisitor.Translate(context, environment, constraint.Body, constraint.Parameters[0]);
+            // Partially evaluate the constraint body before visiting. This folds host-captured
+            // constants (locals declared outside the theorem's parameter scope, e.g. in another
+            // .NET Interactive "submission" or closure) into literal ConstantExpressions, which
+            // sidesteps the reflective MemberExpression resolution in ExpressionVisitor.VisitMember
+            // that crashes across dynamic-assembly boundaries -- see issue #2:
+            // "Field 'X' defined on type 'Submission#N' is not a field on the target object of
+            // type 'Submission#M'". Subtrees that reference the theorem parameter (e.g. t.Values[i])
+            // are left untouched because they are not evaluable without a parameter binding.
+            var body = PartialEvaluator.PartialEval(constraint, ExpressionInterpreter.Instance).Body;
+            BoolExpr expression = (BoolExpr)ExpressionVisitor.Translate(context, environment, body, constraint.Parameters[0]);
 
             Assert(approach, expression);
 
@@ -582,14 +604,14 @@ public class Theorem
 
     private Environment GetEnvironment(Context context, Type targetType)
     {
-        return GetEnvironment(context, targetType, targetType.Name);
+        return GetEnvironment(context, targetType, targetType.Name, false);
     }
 
-    private Environment GetEnvironment(Context context, Type targetType, string prefix)
+    private Environment GetEnvironment(Context context, Type targetType, string prefix, bool isArray)
     {
         var toReturn = new Environment();
 
-        if (IsCollection(targetType))
+        if (isArray || IsCollection(targetType))
         {
             Type? elType;
 
@@ -602,11 +624,31 @@ public class Theorem
                 elType = targetType.GetGenericArguments()[0];
             }
 
+            // Constants mode: one Z3 constant per element, lazily created on index access.
+            // The element sub-environments are materialized by the expression visitor when an
+            // ArrayIndex node is encountered (see ExpressionVisitor.ResolveArrayElement).
+            if (DefaultCollectionHandling == CollectionHandling.Constants)
+            {
+                return new MultipleEnvironment(prefix, elType!);
+            }
+
             TypeCode elTypeCode = Type.GetTypeCode(elType);
 
             if (elTypeCode == TypeCode.Object)
             {
                 toReturn.IsArray = true;
+
+                // Nested array (e.g. int[][]): the element type is itself an array or a
+                // collection. Recurse to build the inner array environment and take its sort
+                // as this array's range, so a Select(i) on the outer yields the inner array.
+                if (elType!.IsArray || (elType.IsGenericType && typeof(IEnumerable).IsAssignableFrom(elType.GetGenericTypeDefinition())))
+                {
+                    var innerEnv = GetEnvironment(context, elType, prefix, true);
+                    toReturn.Expr = context.MkArrayConst(prefix, context.IntSort, ((ArrayExpr)innerEnv.Expr!).Sort);
+                    toReturn.Properties[typeof(Array)] = innerEnv;
+
+                    return toReturn;
+                }
 
                 foreach (PropertyInfo parameter in GetPublicInstanceProperties(elType!))
                 {
@@ -681,7 +723,7 @@ public class Theorem
 
             if (typeCode == TypeCode.Object)
             {
-                return GetEnvironment(context, parameterType, prefix);
+                return GetEnvironment(context, parameterType, prefix, isArray);
             }
 
             Sort sort = TryGetSymbolSort(context, typeCode)
@@ -704,6 +746,40 @@ public class Theorem
         return toReturn;
     }
 
+    /// <summary>
+    /// Gets the Z3 domain sort for an array element type (used as the index sort).
+    /// </summary>
+    private static Sort GetArrayDomainSort(Context context, Type elementType)
+    {
+        // Arrays are indexed by integers in Z3
+        return context.IntSort;
+    }
+
+    /// <summary>
+    /// Gets the Z3 range sort for a scalar element type.
+    /// </summary>
+    private static Sort GetArrayRangeSort(Context context, Type elementType)
+    {
+        switch (Type.GetTypeCode(elementType))
+        {
+            case TypeCode.String:
+                return context.StringSort;
+            case TypeCode.Int16:
+            case TypeCode.Int32:
+            case TypeCode.Int64:
+            case TypeCode.DateTime:
+                return context.IntSort;
+            case TypeCode.Boolean:
+                return context.BoolSort;
+            case TypeCode.Single:
+            case TypeCode.Decimal:
+            case TypeCode.Double:
+                return context.RealSort;
+            default:
+                throw new NotSupportedException($"Unsupported array element type {elementType.FullName}");
+        }
+    }
+
     private static object ConvertZ3Expression(object destinationObject, Context context, Model model, Environment subEnv, MemberInfo parameter, object? template)
     {
         // Normalize types when facing Z3. Theorem variable type mappings allow for strong
@@ -720,41 +796,14 @@ public class Theorem
         {
             if (IsCollection(parameterType))
             {
-                Type eltType = (parameterType.IsArray ? parameterType.GetElementType() : parameterType.GetGenericArguments()[0])
-                    ?? throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
-
-                var arrVal = (ArrayExpr)(subEnv.Expr ?? throw new ArgumentException(
-                    $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
-                    nameof(subEnv)));
-
                 // A solution never changes the length of a collection, so the length has to come
                 // from somewhere: the collection on the template passed to NewTheorem, or failing
                 // that the one already on the instance - its initialiser. A value tuple has nowhere
                 // to put an initialiser and an anonymous instance is created uninitialised, so for
-                // those the template is the only source. With neither, say so by name rather than
-                // fail on the null. See #53 and #78.
-                if ((GetMemberValue(parameter, template) ?? GetMemberValue(parameter, destinationObject)) is not ICollection existing)
-                {
-                    throw new NotSupportedException(
-                        $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
-                }
+                // those the template is the only source. See #53 and #78.
+                object? existingMember = GetMemberValue(parameter, template) ?? GetMemberValue(parameter, destinationObject);
 
-                int existingLength = existing.Count;
-
-                // Fill a typed array in place, rather than an ArrayList that keeps a boxed object[]
-                // backing store and is then copied into a typed array by ToArray. The element values
-                // are still boxed to pass through SetValue, as they were to pass through Add.
-                Array results = Array.CreateInstance(eltType, existingLength);
-
-                TypeCode eltTypeCode = Type.GetTypeCode(eltType);
-
-                for (int i = 0; i < existingLength; i++)
-                {
-                    var numValExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
-                    results.SetValue(ReadZ3Value(numValExpr, eltTypeCode, parameter.Name, eltType), i);
-                }
-
-                value = parameterType.IsArray ? results : Activator.CreateInstance(parameterType, results)!;
+                value = ExtractCollection(existingMember, context, model, subEnv, parameter, parameterType);
             }
             else
             {
@@ -906,6 +955,146 @@ public class Theorem
     }
 
     /// <summary>
+    /// Extracts a collection (simple or nested array) from the Z3 model.
+    /// Handles both flat arrays (int[]) and nested arrays (int[][]) recursively.
+    /// </summary>
+    private static object ExtractCollection(object? existingMember, Context context, Model model, Environment subEnv, MemberInfo parameter, Type parameterType)
+    {
+        Type eltType = parameterType.IsArray ? parameterType.GetElementType()! : parameterType.GetGenericArguments()[0];
+
+        if (eltType == null)
+        {
+            throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
+        }
+
+        var results = new ArrayList();
+
+        var arrVal = subEnv.Expr as ArrayExpr;
+        var multiEnv = subEnv as MultipleEnvironment;
+
+        // Determine the collection length from the existing member
+        int length = 0;
+        if (existingMember != null)
+        {
+            var existingCollection = new ArrayList((ICollection)existingMember);
+            length = existingCollection.Count;
+        }
+
+        // Constants mode: the largest materialized sub-environment index extends the length, so that
+        // every lazily-created Z3 constant (Cells_0, Cells_1, …) is read back from the model.
+        bool isConstantsMode = multiEnv != null && multiEnv.SubEnvironments.Count > 0;
+        if (isConstantsMode)
+        {
+            int maxBound = multiEnv!.SubEnvironments.Keys.Max(k => Convert.ToInt32(k));
+            length = Math.Max(length, maxBound + 1);
+        }
+
+        // A solution never changes the length of a collection, so with no length source (neither a
+        // template/initialiser nor a materialised constant) there is nothing to size it to: say so
+        // by name rather than return an empty collection. See #53 and #78.
+        if (existingMember == null && !isConstantsMode)
+        {
+            throw new NotSupportedException(
+                $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
+        }
+
+        // Check if this is a nested array (e.g. int[][]) — stored in Properties[typeof(Array)]
+        Environment? innerArrayEnv = null;
+        bool isNestedArray = eltType.IsArray && subEnv.Properties.TryGetValue(typeof(Array), out innerArrayEnv);
+
+        for (int i = 0; i < length; i++)
+        {
+            object? elementVal = null;
+
+            // Constants mode: read the scalar/element Z3 constant straight from its sub-environment.
+            if (isConstantsMode && multiEnv!.SubEnvironments.TryGetValue(i, out var subSubEnv))
+            {
+                if (subSubEnv is MultipleEnvironment nestedMulti)
+                {
+                    // Nested Constants collection (e.g. int[][] modeled as constants): recurse per row.
+                    object? existingSubMember = null;
+                    if (existingMember is ICollection outerCollection)
+                    {
+                        var outerList = new ArrayList(outerCollection);
+                        if (i < outerList.Count)
+                        {
+                            existingSubMember = outerList[i];
+                        }
+                    }
+
+                    elementVal = ExtractCollection(existingSubMember, context, model, nestedMulti, parameter, eltType);
+                }
+                else if (subSubEnv.Expr != null)
+                {
+                    Expr val = EvaluateWithCompletion(model, subSubEnv.Expr);
+                    elementVal = ConvertScalarExpr(val, eltType, context, model, subEnv, parameter);
+                }
+            }
+            else if (arrVal != null)
+            {
+                // For nested arrays, Select(outer, i) yields the inner array (row i).
+                // For simple arrays, Select(arr, i) yields a scalar value.
+                Expr rowExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
+
+                if (isNestedArray && innerArrayEnv != null)
+                {
+                    // rowExpr is (Array Int Int) for this row — build a temp environment
+                    // holding it and recurse to extract the inner scalar array.
+                    var rowEnv = new Environment { Expr = rowExpr };
+                    object? existingSubMember = null;
+
+                    if (existingMember is ICollection outerCollection)
+                    {
+                        var outerList = new ArrayList(outerCollection);
+                        if (i < outerList.Count)
+                        {
+                            existingSubMember = outerList[i];
+                        }
+                    }
+
+                    elementVal = ExtractCollection(existingSubMember, context, model, rowEnv, parameter, eltType);
+                }
+                else
+                {
+                    elementVal = ConvertScalarExpr(rowExpr, eltType, context, model, subEnv, parameter);
+                }
+            }
+
+            results.Add(elementVal);
+        }
+
+        object value = parameterType.IsArray ? results.ToArray(eltType) : Activator.CreateInstance(parameterType, results.ToArray(eltType))!;
+
+        return value;
+    }
+
+    /// <summary>
+    /// Converts a Z3 scalar expression (as evaluated against a model) into a CLR value of the given
+    /// element type. Shared by the Array-mode and Constants-mode collection extraction paths so the
+    /// two modes agree on how Z3 values are materialized.
+    /// </summary>
+    /// <param name="numValExpr">Evaluated Z3 expression of the scalar (already passed through <c>model.Eval</c> for Array mode, or a constant for Constants mode).</param>
+    /// <param name="eltType">CLR element type to convert into.</param>
+    /// <param name="context">Z3 context (used for Decimal/Real evaluation).</param>
+    /// <param name="model">Z3 model (used for Decimal precision evaluation).</param>
+    /// <param name="subEnv">Environment of the collection (used to recurse for complex-object elements).</param>
+    /// <param name="parameter">Member being extracted (for error messages).</param>
+    /// <returns>CLR scalar value.</returns>
+    private static object? ConvertScalarExpr(Expr numValExpr, Type eltType, Context context, Model model, Environment subEnv, MemberInfo parameter)
+    {
+        if (Type.GetTypeCode(eltType) == TypeCode.Object)
+        {
+            // Complex object element within a collection
+            return GetSolution(eltType, context, model, subEnv, null);
+        }
+
+        // Scalar element: delegate to the shared converter, which handles every element type
+        // (integral, floating-point, decimal, DateTime, string, boolean) with the correct
+        // per-type boxing.
+        return ReadZ3Value(numValExpr, Type.GetTypeCode(eltType), parameter.Name, eltType);
+    }
+
+    /// <summary>
     /// Gets the solution object for the solved theorem.
     /// </summary>
     /// <typeparam name="T">Environment type to create an instance of.</typeparam>
@@ -952,7 +1141,7 @@ public class Theorem
                 // Mapping from property to field.
                 var field = fields.SingleOrDefault(f => f.Name.StartsWith($"<{parameter.Name}>"));
 
-                if (field == null) 
+                if (field == null)
                 {
                     continue;
                 }

@@ -5,6 +5,24 @@ using System.Collections.Generic;
 using System.Reflection;
 
 /// <summary>
+/// Controls how collection properties are modeled in Z3.
+/// Constants = one Z3 constant per element (enables constraints on individual elements).
+/// Array = Z3 array theory (single ArrayExpr with Select/Store).
+/// </summary>
+public enum CollectionHandling
+{
+    /// <summary>
+    /// One Z3 constant per element (enables constraints on individual elements).
+    /// </summary>
+    Constants,
+
+    /// <summary>
+    /// Z3 array theory (single ArrayExpr with Select/Store).
+    /// </summary>
+    Array
+}
+
+/// <summary>
 /// The Z3 handles standing in for the members of an environment type while a theorem is solved.
 /// </summary>
 /// <remarks>
@@ -37,4 +55,37 @@ public class Environment
     /// Gets the environments of the members of a nested object, keyed by member.
     /// </summary>
     public Dictionary<MemberInfo, Environment> Properties { get; private set; } = new Dictionary<MemberInfo, Environment>();
+}
+
+/// <summary>
+/// Environment for a collection modeled as individual Z3 constants (CollectionHandling.Constants).
+/// Lazily creates sub-environments per element index on access.
+/// </summary>
+public class MultipleEnvironment : Environment
+{
+    /// <summary>
+    /// Creates a new collection environment with the given prefix and element type.
+    /// </summary>
+    /// <param name="prefix">The name prefix for the element constants.</param>
+    /// <param name="elementType">The type of each element in the collection.</param>
+    public MultipleEnvironment(string prefix, Type elementType)
+    {
+        Prefix = prefix;
+        ElementType = elementType;
+    }
+
+    /// <summary>
+    /// Gets or sets the name prefix for the element constants.
+    /// </summary>
+    public string Prefix { get; set; }
+
+    /// <summary>
+    /// Gets or sets the type of each element in the collection.
+    /// </summary>
+    public Type ElementType { get; set; }
+
+    /// <summary>
+    /// Gets or sets the sub-environments, keyed by element index.
+    /// </summary>
+    public Dictionary<object, Environment> SubEnvironments { get; set; } = new Dictionary<object, Environment>();
 }

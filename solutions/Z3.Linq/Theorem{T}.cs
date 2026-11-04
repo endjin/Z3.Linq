@@ -177,7 +177,12 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// <returns>Theorem with the new constraint applied.</returns>
     public Theorem<T> Where(Expression<Func<T, bool>> constraint)
     {
-        return new Theorem<T>(base.Context, base.Constraints.Concat([constraint]), base.Template);
+        return new Theorem<T>(base.Context, base.Constraints.Concat([constraint]), base.Template)
+        {
+            // Preserve the collection-handling mode across Where chains (the constraint lambda is compiled
+            // against the same environment type, so the mode must not reset to the default).
+            DefaultCollectionHandling = this.DefaultCollectionHandling,
+        };
     }
 
     /// <summary>
