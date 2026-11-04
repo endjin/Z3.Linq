@@ -11,7 +11,14 @@ using System.Reflection;
 /// </summary>
 public enum CollectionHandling
 {
+    /// <summary>
+    /// One Z3 constant per element (enables constraints on individual elements).
+    /// </summary>
     Constants,
+
+    /// <summary>
+    /// Z3 array theory (single ArrayExpr with Select/Store).
+    /// </summary>
     Array
 }
 
@@ -56,13 +63,29 @@ public class Environment
 /// </summary>
 public class MultipleEnvironment : Environment
 {
+    /// <summary>
+    /// Creates a new collection environment with the given prefix and element type.
+    /// </summary>
+    /// <param name="prefix">The name prefix for the element constants.</param>
+    /// <param name="elementType">The type of each element in the collection.</param>
     public MultipleEnvironment(string prefix, Type elementType)
     {
         Prefix = prefix;
         ElementType = elementType;
     }
 
+    /// <summary>
+    /// Gets or sets the name prefix for the element constants.
+    /// </summary>
     public string Prefix { get; set; }
+
+    /// <summary>
+    /// Gets or sets the type of each element in the collection.
+    /// </summary>
     public Type ElementType { get; set; }
+
+    /// <summary>
+    /// Gets or sets the sub-environments, keyed by element index.
+    /// </summary>
     public Dictionary<object, Environment> SubEnvironments { get; set; } = new Dictionary<object, Environment>();
 }

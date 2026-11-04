@@ -723,7 +723,7 @@ public class Theorem
 
             if (typeCode == TypeCode.Object)
             {
-                return GetEnvironment(context, parameterType, prefix);
+                return GetEnvironment(context, parameterType, prefix, isArray);
             }
 
             Sort sort = TryGetSymbolSort(context, typeCode)
@@ -796,13 +796,12 @@ public class Theorem
         {
             if (IsCollection(parameterType))
             {
-                // Delegate to ExtractCollection for both simple and nested array extraction
-                object? existingMember = parameter switch
-                {
-                    PropertyInfo info => info.GetValue(destinationObject, null),
-                    FieldInfo info1 => info1.GetValue(destinationObject),
-                    _ => null
-                };
+                // A solution never changes the length of a collection, so the length has to come
+                // from somewhere: the collection on the template passed to NewTheorem, or failing
+                // that the one already on the instance - its initialiser. A value tuple has nowhere
+                // to put an initialiser and an anonymous instance is created uninitialised, so for
+                // those the template is the only source. See #53 and #78.
+                object? existingMember = GetMemberValue(parameter, template) ?? GetMemberValue(parameter, destinationObject);
 
                 value = ExtractCollection(existingMember, context, model, subEnv, parameter, parameterType);
             }
@@ -990,6 +989,15 @@ public class Theorem
             length = Math.Max(length, maxBound + 1);
         }
 
+        // A solution never changes the length of a collection, so with no length source (neither a
+        // template/initialiser nor a materialised constant) there is nothing to size it to: say so
+        // by name rather than return an empty collection. See #53 and #78.
+        if (existingMember == null && !isConstantsMode)
+        {
+            throw new NotSupportedException(
+                $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
+        }
+
         // Check if this is a nested array (e.g. int[][]) — stored in Properties[typeof(Array)]
         Environment? innerArrayEnv = null;
         bool isNestedArray = eltType.IsArray && subEnv.Properties.TryGetValue(typeof(Array), out innerArrayEnv);
@@ -1018,7 +1026,7 @@ public class Theorem
                 }
                 else if (subSubEnv.Expr != null)
                 {
-                    Expr val = model.Eval(subSubEnv.Expr);
+                    Expr val = EvaluateWithCompletion(model, subSubEnv.Expr);
                     elementVal = ConvertScalarExpr(val, eltType, context, model, subEnv, parameter);
                 }
             }
@@ -1026,7 +1034,7 @@ public class Theorem
             {
                 // For nested arrays, Select(outer, i) yields the inner array (row i).
                 // For simple arrays, Select(arr, i) yields a scalar value.
-                Expr rowExpr = model.Eval(context.MkSelect(arrVal, context.MkInt(i)));
+                Expr rowExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
 
                 if (isNestedArray && innerArrayEnv != null)
                 {
@@ -1074,40 +1082,16 @@ public class Theorem
     /// <returns>CLR scalar value.</returns>
     private static object? ConvertScalarExpr(Expr numValExpr, Type eltType, Context context, Model model, Environment subEnv, MemberInfo parameter)
     {
-        switch (Type.GetTypeCode(eltType))
+        if (Type.GetTypeCode(eltType) == TypeCode.Object)
         {
-            case TypeCode.String:
-                return numValExpr.String;
-            case TypeCode.Int16:
-            case TypeCode.Int32:
-                return ((IntNum)numValExpr).Int;
-            case TypeCode.Int64:
-                return ((IntNum)numValExpr).Int64;
-            case TypeCode.DateTime:
-                return DateTime.FromFileTime(((IntNum)numValExpr).Int64);
-            case TypeCode.Boolean:
-                return numValExpr.IsTrue;
-            case TypeCode.Single:
-                return double.Parse(((RatNum)numValExpr).ToDecimalString(32), CultureInfo.InvariantCulture);
-            case TypeCode.Decimal:
-            {
-                Expr val = model.Eval(numValExpr);
-                string numValue = ((RatNum)val).ToDecimalString(128);
-                ReadOnlySpan<char> numValueSpan = numValue.AsSpan();
-                if (numValue.EndsWith('?'))
-                {
-                    numValueSpan = numValueSpan[..^1];
-                }
-                return decimal.Parse(numValueSpan, NumberStyles.Number, CultureInfo.InvariantCulture);
-            }
-            case TypeCode.Double:
-                return double.Parse(((RatNum)numValExpr).ToDecimalString(64), CultureInfo.InvariantCulture);
-            case TypeCode.Object:
-                // Complex object element within a collection
-                return GetSolution(eltType, context, model, subEnv);
-            default:
-                throw new NotSupportedException($"Unsupported array parameter type for {parameter.Name} and array element type {eltType.Name}.");
+            // Complex object element within a collection
+            return GetSolution(eltType, context, model, subEnv, null);
         }
+
+        // Scalar element: delegate to the shared converter, which handles every element type
+        // (integral, floating-point, decimal, DateTime, string, boolean) with the correct
+        // per-type boxing.
+        return ReadZ3Value(numValExpr, Type.GetTypeCode(eltType), parameter.Name, eltType);
     }
 
     /// <summary>

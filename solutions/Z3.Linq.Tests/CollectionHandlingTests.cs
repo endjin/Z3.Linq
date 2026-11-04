@@ -1,10 +1,5 @@
 namespace Z3.Linq.Tests;
 
-using Microsoft.Z3;
-using System;
-using System.Linq;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-
 /// <summary>
 /// Keystone tests for the resurrected <see cref="CollectionHandling"/> modes.
 ///
@@ -68,47 +63,51 @@ public class CollectionHandlingTests
         return theorem;
     }
 
-    [Theory]
-    [DataRow(CollectionHandling.Array)]
-    [DataRow(CollectionHandling.Constants)]
-    public void Sudoku4x4_IsSolvable_InBothModes(CollectionHandling mode)
+    [TestMethod]
+    public void Sudoku4x4_IsSolvable_InBothModes()
     {
-        using var ctx = new Z3Context { DefaultCollectionHandling = mode };
-        var solution = BuildSudoku4x4(ctx).Solve();
-
-        Assert.NotNull(solution);
-        foreach (var row in solution!.Cells)
+        foreach (CollectionHandling mode in new[] { CollectionHandling.Array, CollectionHandling.Constants })
         {
-            foreach (var v in row)
+            using var ctx = new Z3Context { DefaultCollectionHandling = mode };
+            var solution = BuildSudoku4x4(ctx).Solve();
+
+            solution.ShouldNotBeNull();
+            foreach (var row in solution!.Cells)
             {
-                Assert.InRange(v, 1, 4);
+                foreach (var v in row)
+                {
+                    v.ShouldBeInRange(1, 4);
+                }
             }
-        }
 
-        // A valid 4x4 Latin square: each row and each column is a permutation of 1..4.
-        for (int r = 0; r < 4; r++)
-        {
-            Assert.True(new[] { 1, 2, 3, 4 }.SequenceEqual(solution.Cells[r].OrderBy(v => v)));
-        }
+            // A valid 4x4 Latin square: each row and each column is a permutation of 1..4.
+            for (int r = 0; r < 4; r++)
+            {
+                solution.Cells[r].OrderBy(v => v).ToArray()
+                    .ShouldBe([1, 2, 3, 4], $"mode={mode} row {r}");
+            }
 
-        for (int c = 0; c < 4; c++)
-        {
-            Assert.True(new[] { 1, 2, 3, 4 }.SequenceEqual(Enumerable.Range(0, 4).Select(r => solution.Cells[r][c]).OrderBy(v => v)));
+            for (int c = 0; c < 4; c++)
+            {
+                Enumerable.Range(0, 4).Select(r => solution.Cells[r][c]).OrderBy(v => v).ToArray()
+                    .ShouldBe([1, 2, 3, 4], $"mode={mode} col {c}");
+            }
         }
     }
 
-    [Theory]
-    [DataRow(CollectionHandling.Array)]
-    [DataRow(CollectionHandling.Constants)]
-    public void Sudoku4x4_RespectsHint_InBothModes(CollectionHandling mode)
+    [TestMethod]
+    public void Sudoku4x4_RespectsHint_InBothModes()
     {
-        using var ctx = new Z3Context { DefaultCollectionHandling = mode };
-        var theorem = BuildSudoku4x4(ctx).Where(g => g.Cells[0][0] == 2);
+        foreach (CollectionHandling mode in new[] { CollectionHandling.Array, CollectionHandling.Constants })
+        {
+            using var ctx = new Z3Context { DefaultCollectionHandling = mode };
+            var theorem = BuildSudoku4x4(ctx).Where(g => g.Cells[0][0] == 2);
 
-        var solution = theorem.Solve();
+            var solution = theorem.Solve();
 
-        Assert.NotNull(solution);
-        Assert.Equal(2, solution!.Cells[0][0]);
+            solution.ShouldNotBeNull();
+            solution!.Cells[0][0].ShouldBe(2, $"mode={mode}");
+        }
     }
 
     [TestMethod]
@@ -117,7 +116,7 @@ public class CollectionHandlingTests
         // Anti-regression guard: a context with no explicit mode must default to Array,
         // preserving the historical (pre-resurrection) behavior.
         using var ctx = new Z3Context();
-        Assert.Equal(CollectionHandling.Array, ctx.DefaultCollectionHandling);
+        ctx.DefaultCollectionHandling.ShouldBe(CollectionHandling.Array);
     }
 
     /// <summary>
@@ -141,9 +140,9 @@ public class CollectionHandlingTests
 
         var solution = theorem.Solve();
 
-        Assert.NotNull(solution);
-        Assert.Equal(7, solution!.Values[0]);
-        Assert.Equal(7, solution.Values[1]);
-        Assert.Equal(7, solution.Values[2]);
+        solution.ShouldNotBeNull();
+        solution!.Values[0].ShouldBe(7);
+        solution.Values[1].ShouldBe(7);
+        solution.Values[2].ShouldBe(7);
     }
 }
