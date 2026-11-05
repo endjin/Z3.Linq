@@ -39,6 +39,28 @@ public class DistinctInlineArrayTheoremTests
     }
 
     [TestMethod]
+    public void Distinct_InlineSymbolsFreeInASharedRange_ForcesThemApart()
+    {
+        // Arrange: both symbols range over the same two values and neither is pinned, so only
+        // Distinct stops Z3 returning X1 == X2. Both (0, 1) and (1, 0) satisfy the theorem, so
+        // the assertions check the invariants rather than which of the two models comes back.
+        using var context = new Z3Context();
+
+        // Act
+        var result = (from t in context.NewTheorem<Symbols<int, int>>()
+                      where Z3Methods.Distinct(t.X1, t.X2)
+                      where t.X1 >= 0 && t.X1 <= 1
+                      where t.X2 >= 0 && t.X2 <= 1
+                      select t).Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result.X1.ShouldNotBe(result.X2);
+        result.X1.ShouldBeInRange(0, 1);
+        result.X2.ShouldBeInRange(0, 1);
+    }
+
+    [TestMethod]
     public void Distinct_InlineSymbolsConstrainedEqual_IsUnsatisfiable()
     {
         // Act
