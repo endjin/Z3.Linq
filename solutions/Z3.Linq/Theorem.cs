@@ -824,7 +824,11 @@ public class Theorem
     /// </param>
     /// <param name="collectionType">The CLR type of the collection to build.</param>
     /// <param name="existing">The collection whose shape the result takes: its length, and for a nested collection the length of each row.</param>
-    /// <param name="symbolName">The symbol's name, indexed for a row - <c>Cells[0]</c> - for the diagnostics.</param>
+    /// <param name="symbolName">
+    /// The symbol's name, indexed for a row - <c>Cells[0]</c>. Each element read adds its own
+    /// index, so a diagnostic names the element that failed - <c>Cells[0][2]</c> - not the
+    /// collection holding it.
+    /// </param>
     /// <returns>An array, or a collection built from one through its constructor.</returns>
     /// <remarks>
     /// <para>
@@ -874,7 +878,7 @@ public class Theorem
             for (int i = 0; i < results.Length; i++)
             {
                 var numValExpr = EvaluateWithCompletion(model, context.MkSelect(array, context.MkInt(i)));
-                results.SetValue(ReadZ3Value(numValExpr, elementTypeCode, symbolName, elementType), i);
+                results.SetValue(ReadZ3Value(numValExpr, elementTypeCode, $"{symbolName}[{i}]", elementType), i);
             }
         }
 

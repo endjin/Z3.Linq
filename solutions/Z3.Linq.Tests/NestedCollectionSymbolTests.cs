@@ -267,6 +267,26 @@ public class NestedCollectionSymbolTests
     }
 
     [TestMethod]
+    public void Solve_JaggedDateTimeElementConstrainedBeyondMaxValue_ThrowsOverflowExceptionNamingTheElement()
+    {
+        // Arrange: the diagnostic names the element that failed, with every index, rather than
+        // the row or the symbol that holds it. Cells[0][0] is pinned in range because a free
+        // element can take the array's default value, which here is the out-of-range one.
+        using var context = new Z3Context();
+        DateTime max = DateTime.MaxValue;
+        DateTime inRange = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var theorem = context.NewTheorem<JaggedDateTimeEnvironment>()
+            .Where(t => t.Cells[0][0] == inRange)
+            .Where(t => t.Cells[1][0] > max);
+
+        // Act
+        OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
+
+        // Assert
+        exception.Message.ShouldContain("DateTime symbol Cells[1][0] ");
+    }
+
+    [TestMethod]
     public void Solve_JaggedArrayWithANullRow_ThrowsNotSupportedExceptionNamingTheRow()
     {
         // Arrange: the outer collection has a length but its rows do not, so the row is named
@@ -401,6 +421,11 @@ public class NestedCollectionSymbolTests
     private sealed class JaggedShortEnvironment
     {
         public short[][] Cells { get; set; } = [new short[2]];
+    }
+
+    private sealed class JaggedDateTimeEnvironment
+    {
+        public DateTime[][] Cells { get; set; } = [new DateTime[1], new DateTime[1]];
     }
 
     private sealed class NullRowEnvironment

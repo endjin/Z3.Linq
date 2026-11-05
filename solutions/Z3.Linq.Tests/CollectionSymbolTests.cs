@@ -606,7 +606,7 @@ public class CollectionSymbolTests
         OverflowException exception = Should.Throw<OverflowException>(() => theorem.Solve());
 
         // Assert
-        exception.Message.ShouldContain("Values");
+        exception.Message.ShouldContain("DateTime symbol Values[0] ");
         exception.Message.ShouldContain("0001-01-01 to 9999-12-31");
     }
 
