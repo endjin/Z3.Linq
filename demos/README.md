@@ -23,7 +23,9 @@ there, so it is safe to run again.
 The first run of a file restores its packages and builds it; later runs are fast. Each file
 declares its own dependencies at the top (`#:package Spectre.Console`, `#:project ...` to the
 `Z3.Linq` and `Z3.Linq.Examples` projects in [`../solutions`](../solutions)), so they build against
-your local source.
+your local source. [`cross-submission-capture.cs`](cross-submission-capture.cs) also declares
+`#:package Microsoft.CodeAnalysis.CSharp.Scripting`, so its first run downloads the Roslyn
+scripting packages as well.
 
 ## The demos
 
@@ -36,6 +38,7 @@ your local source.
 | [`linear-systems.cs`](linear-systems.cs) | Small integer constraint systems, including Bart De Smet's TechEd Europe 2012 example. |
 | [`oil-purchase.cs`](oil-purchase.cs) | A least-cost linear program (`orderby` minimises the bill). |
 | [`warehouse.cs`](warehouse.cs) | Least-cost shipping across two warehouses to four customers. |
+| [`cross-submission-capture.cs`](cross-submission-capture.cs) | A local declared in one Roslyn scripting submission and used in a constraint in the next - the notebook-cell shape - with the member chain it produces. |
 
 ## Running everything
 
@@ -50,6 +53,7 @@ dotnet run demos/boolean-logic.cs
 dotnet run demos/linear-systems.cs
 dotnet run demos/oil-purchase.cs
 dotnet run demos/warehouse.cs
+dotnet run demos/cross-submission-capture.cs
 ```
 
 Output is styled when run in a terminal and degrades to plain text when redirected (piped to a file
