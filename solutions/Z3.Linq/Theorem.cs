@@ -536,6 +536,11 @@ public class Theorem
     /// CLR types: whether the conversion is a no-op, an integer-to-real, or a real-to-integer
     /// depends only on the sorts the two types map to here. See #76.
     /// </para>
+    /// <para>
+    /// It is still the only scalar mapping. A nested collection's sort is derived from it
+    /// recursively by <see cref="TryGetSort(Context, Type)"/>, so an <c>int[][]</c> ends in the
+    /// same <c>Int</c> an <c>int</c> does. See #43.
+    /// </para>
     /// </remarks>
     internal static Sort? TryGetSymbolSort(Context context, TypeCode typeCode)
     {
@@ -580,6 +585,32 @@ public class Theorem
         };
     }
 
+    /// <summary>
+    /// Gets the Z3 sort a symbol of the given CLR type is declared with - a scalar or a
+    /// collection, nested to any depth - or <see langword="null"/> if the type is not one the
+    /// library maps.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="type">The CLR type of the symbol.</param>
+    /// <returns>The sort, or <see langword="null"/>.</returns>
+    /// <remarks>
+    /// A collection is an array from <c>Int</c> to the sort of its element type, and that element
+    /// type may itself be a collection, so an <c>int[][]</c> is an array from <c>Int</c> to an
+    /// array from <c>Int</c> to <c>Int</c>. The scalar at the bottom is mapped by
+    /// <see cref="TryGetSymbolSort(Context, TypeCode)"/>. See #43.
+    /// </remarks>
+    private static Sort? TryGetSort(Context context, Type type)
+    {
+        if (IsCollection(type))
+        {
+            return TryGetSort(context, CollectionElementType(type)) is Sort elementSort
+                ? context.MkArraySort(context.IntSort, elementSort)
+                : null;
+        }
+
+        return TryGetSymbolSort(context, Type.GetTypeCode(type));
+    }
+
     private Environment GetEnvironment(Context context, Type targetType)
     {
         return GetEnvironment(context, targetType, targetType.Name);
@@ -591,15 +622,20 @@ public class Theorem
 
         if (IsCollection(targetType))
         {
-            Type? elType;
+            Type elType = CollectionElementType(targetType);
 
-            if (targetType.IsArray)
+            // A collection of collections is one Z3 array whose range is the sort of its element
+            // type, derived recursively. This has to be checked before the collection-of-objects
+            // branch below, because an array's TypeCode is Object too: taken there, an int[][]
+            // was treated as a collection of Array instances and failed on Array.SyncRoot. See #43.
+            if (IsCollection(elType))
             {
-                elType = targetType.GetElementType();
-            }
-            else
-            {
-                elType = targetType.GetGenericArguments()[0];
+                toReturn.Expr = context.MkArrayConst(
+                    prefix,
+                    context.IntSort,
+                    TryGetSort(context, elType) ?? throw new NotSupportedException($"Unsupported member type {targetType.FullName}"));
+
+                return toReturn;
             }
 
             TypeCode elTypeCode = Type.GetTypeCode(elType);
@@ -608,7 +644,7 @@ public class Theorem
             {
                 toReturn.IsArray = true;
 
-                foreach (PropertyInfo parameter in GetPublicInstanceProperties(elType!))
+                foreach (PropertyInfo parameter in GetPublicInstanceProperties(elType))
                 {
                     var newPrefix = parameter.Name;
 
@@ -720,9 +756,6 @@ public class Theorem
         {
             if (IsCollection(parameterType))
             {
-                Type eltType = (parameterType.IsArray ? parameterType.GetElementType() : parameterType.GetGenericArguments()[0])
-                    ?? throw new NotSupportedException("Unsupported untyped array parameter type for " + parameter.Name + ".");
-
                 var arrVal = (ArrayExpr)(subEnv.Expr ?? throw new ArgumentException(
                     $"nameof(ConvertZ3Expression) requires {nameof(subEnv)}.{nameof(subEnv.Expr)} to be non-null",
                     nameof(subEnv)));
@@ -739,22 +772,7 @@ public class Theorem
                         $"Collection symbol {parameter.Name} has no length. A collection must be pre-sized: initialise it on the environment type, or pass an instance with it initialised to NewTheorem.");
                 }
 
-                int existingLength = existing.Count;
-
-                // Fill a typed array in place, rather than an ArrayList that keeps a boxed object[]
-                // backing store and is then copied into a typed array by ToArray. The element values
-                // are still boxed to pass through SetValue, as they were to pass through Add.
-                Array results = Array.CreateInstance(eltType, existingLength);
-
-                TypeCode eltTypeCode = Type.GetTypeCode(eltType);
-
-                for (int i = 0; i < existingLength; i++)
-                {
-                    var numValExpr = EvaluateWithCompletion(model, context.MkSelect(arrVal, context.MkInt(i)));
-                    results.SetValue(ReadZ3Value(numValExpr, eltTypeCode, parameter.Name, eltType), i);
-                }
-
-                value = parameterType.IsArray ? results : Activator.CreateInstance(parameterType, results)!;
+                value = ReadCollection(context, model, arrVal, parameterType, existing, parameter.Name);
             }
             else
             {
@@ -792,6 +810,79 @@ public class Theorem
         }
 
         return value!;
+    }
+
+    /// <summary>
+    /// Reads a collection symbol back from the model, one element per element of an existing
+    /// collection of the same shape.
+    /// </summary>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="model">Z3 model to evaluate the elements under.</param>
+    /// <param name="array">
+    /// The Z3 array holding the collection - the symbol itself, or for a row of a nested
+    /// collection the unevaluated select of that row from the collection above it.
+    /// </param>
+    /// <param name="collectionType">The CLR type of the collection to build.</param>
+    /// <param name="existing">The collection whose shape the result takes: its length, and for a nested collection the length of each row.</param>
+    /// <param name="symbolName">
+    /// The symbol's name, indexed for a row - <c>Cells[0]</c>. Each element read adds its own
+    /// index, so a diagnostic names the element that failed - <c>Cells[0][2]</c> - not the
+    /// collection holding it.
+    /// </param>
+    /// <returns>An array, or a collection built from one through its constructor.</returns>
+    /// <remarks>
+    /// <para>
+    /// A nested collection recurses row by row, and each row's length comes from the matching row
+    /// of <paramref name="existing"/>. That is the same instance the outer length came from, so a
+    /// template wins for the row lengths as it does for the outer one (#53, #78), and rows may
+    /// differ in length. A row that is null has no length and is rejected by name.
+    /// </para>
+    /// <para>
+    /// The row is passed down as a select term, not evaluated, and only the scalar at the bottom is
+    /// evaluated with completion. So a nested element nothing constrains is filled by completion
+    /// exactly as a flat one is (#51), rather than depending on how Z3 chose to represent the
+    /// row's array value. See #43.
+    /// </para>
+    /// </remarks>
+    private static object ReadCollection(Context context, Model model, ArrayExpr array, Type collectionType, ICollection existing, string symbolName)
+    {
+        Type elementType = CollectionElementType(collectionType);
+
+        // Fill a typed array in place, rather than an ArrayList that keeps a boxed object[]
+        // backing store and is then copied into a typed array by ToArray. The element values
+        // are still boxed to pass through SetValue, as they were to pass through Add.
+        Array results = Array.CreateInstance(elementType, existing.Count);
+
+        if (IsCollection(elementType))
+        {
+            int i = 0;
+            foreach (object? row in existing)
+            {
+                string rowName = $"{symbolName}[{i}]";
+
+                if (row is not ICollection existingRow)
+                {
+                    throw new NotSupportedException(
+                        $"Collection symbol {rowName} has no length. A collection must be pre-sized: initialise every row on the environment type, or pass an instance with them initialised to NewTheorem.");
+                }
+
+                var rowArray = (ArrayExpr)context.MkSelect(array, context.MkInt(i));
+                results.SetValue(ReadCollection(context, model, rowArray, elementType, existingRow, rowName), i);
+                i++;
+            }
+        }
+        else
+        {
+            TypeCode elementTypeCode = Type.GetTypeCode(elementType);
+
+            for (int i = 0; i < results.Length; i++)
+            {
+                var numValExpr = EvaluateWithCompletion(model, context.MkSelect(array, context.MkInt(i)));
+                results.SetValue(ReadZ3Value(numValExpr, elementTypeCode, $"{symbolName}[{i}]", elementType), i);
+            }
+        }
+
+        return collectionType.IsArray ? results : Activator.CreateInstance(collectionType, results)!;
     }
 
     /// <summary>
@@ -903,6 +994,15 @@ public class Theorem
     private static bool IsCollection(Type type)
     {
         return type.IsArray || (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type.GetGenericTypeDefinition()));
+    }
+
+    /// <summary>
+    /// The element type of a type <see cref="IsCollection(Type)"/> accepts: an array's element
+    /// type, or a generic collection's first type argument.
+    /// </summary>
+    private static Type CollectionElementType(Type collectionType)
+    {
+        return collectionType.IsArray ? collectionType.GetElementType()! : collectionType.GetGenericArguments()[0];
     }
 
     /// <summary>

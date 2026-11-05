@@ -9,7 +9,8 @@ using System.Reflection;
 /// </summary>
 /// <remarks>
 /// Built once per solve by walking the environment type. A scalar member gets a constant of its
-/// type's sort in <see cref="Expr"/>, a collection gets an array from <c>Int</c> to that sort,
+/// type's sort in <see cref="Expr"/>, a collection gets an array from <c>Int</c> to that sort -
+/// for a nested collection such as <c>int[][]</c>, to the array sort of its element type (#43) -
 /// and a nested object gets an <see cref="Environment"/> of its own under
 /// <see cref="Properties"/>, with no <see cref="Expr"/>. Public because
 /// the translator takes one; there is no reason to build one directly.

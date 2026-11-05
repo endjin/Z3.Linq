@@ -17,6 +17,7 @@ var demos = new (string Name, string File, string Blurb)[]
     ("Linear systems", "linear-systems.cs", "Integer constraint systems, incl. Bart's TechEd example"),
     ("Oil purchase", "oil-purchase.cs", "A least-cost linear program"),
     ("Warehouse logistics", "warehouse.cs", "Least-cost shipping across two warehouses"),
+    ("Cross-submission capture", "cross-submission-capture.cs", "A local captured from an earlier scripting submission"),
 };
 
 // Run from the repo root (`dotnet run demos/menu.cs`) or from within demos/.
