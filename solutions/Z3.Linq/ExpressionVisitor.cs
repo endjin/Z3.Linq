@@ -663,7 +663,10 @@ internal sealed class ExpressionVisitor
         // compiler's closure, which reaches here as a constant; a static field or property - such
         // as DateTime.MaxValue, which is static readonly rather than const, so the compiler leaves
         // it as a member access - has no instance at all. Each member is read from the value of
-        // the one before it, so a chain such as holder.In.Value works at any length.
+        // the one before it, so a chain such as holder.In.Value works at any length. A scripting
+        // host (Roslyn scripting, .NET Interactive) reaches here in the same shape - the lambda's
+        // submission instance as the constant, a compiler-generated field to the earlier
+        // submission, then the captured local - so the chain walk covers it. See #43.
         if (topMember.Expression is ConstantExpression or null)
         {
             object? value = (topMember.Expression as ConstantExpression)?.Value;
