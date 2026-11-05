@@ -51,8 +51,21 @@ public static class SudokuGridTheorem
     /// <param name="column">The column, from zero.</param>
     /// <param name="value">The digit the cell holds.</param>
     /// <returns>A constraint to pass to <c>Where</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="row"/> or <paramref name="column"/> is outside 0 to 8.
+    /// </exception>
+    /// <remarks>
+    /// The coordinates are checked here because Z3 would not catch them: the grid is a Z3 array
+    /// indexed by any integer, so a given at row 9 would constrain an element the 9x9 grid never
+    /// reads back, and the puzzle would solve with that given silently missing.
+    /// </remarks>
     public static Expression<Func<SudokuGrid, bool>> Given(int row, int column, int value)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(row);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(row, 8);
+        ArgumentOutOfRangeException.ThrowIfNegative(column);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(column, 8);
+
         ParameterExpression grid = Expression.Parameter(typeof(SudokuGrid), "g");
 
         return Expression.Lambda<Func<SudokuGrid, bool>>(

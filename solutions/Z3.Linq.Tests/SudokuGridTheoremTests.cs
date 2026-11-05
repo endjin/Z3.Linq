@@ -115,6 +115,18 @@ public class SudokuGridTheoremTests
         result.ShouldBeNull();
     }
 
+    [TestMethod]
+    [DataRow(-1, 0, DisplayName = "Row below the grid")]
+    [DataRow(9, 0, DisplayName = "Row past the grid")]
+    [DataRow(0, -1, DisplayName = "Column below the grid")]
+    [DataRow(0, 9, DisplayName = "Column past the grid")]
+    public void Given_CoordinateOutsideTheGrid_ThrowsArgumentOutOfRangeException(int row, int column)
+    {
+        // Act & Assert: Z3 would accept the off-grid index and solve without the given, so the
+        // coordinates have to be rejected before the constraint is built.
+        Should.Throw<ArgumentOutOfRangeException>(() => SudokuGridTheorem.Given(row, column, 5));
+    }
+
     /// <summary>
     /// Adds every non-zero cell of <paramref name="puzzle"/> as a given and solves.
     /// </summary>
