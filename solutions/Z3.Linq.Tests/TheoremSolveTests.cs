@@ -1,7 +1,7 @@
 namespace Z3.Linq.Tests;
 
 /// <summary>
-/// Core solve semantics: what <see cref="Theorem{T}.Solve"/> returns for satisfiable and
+/// Core solve semantics: what <see cref="Theorem{T}.Solve(CancellationToken)"/> returns for satisfiable and
 /// unsatisfiable theorems, and how the result is populated.
 /// </summary>
 /// <remarks>

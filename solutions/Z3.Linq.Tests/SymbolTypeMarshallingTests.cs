@@ -1,7 +1,7 @@
 namespace Z3.Linq.Tests;
 
 /// <summary>
-/// Round-trips a value of each scalar symbol type through <see cref="Theorem{T}.Solve"/>:
+/// Round-trips a value of each scalar symbol type through <see cref="Theorem{T}.Solve(CancellationToken)"/>:
 /// C# constant -> Z3 term -> model -> CLR property.
 /// </summary>
 /// <remarks>

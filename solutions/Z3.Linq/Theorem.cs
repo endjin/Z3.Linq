@@ -108,6 +108,28 @@ public class Theorem
     }
 
     /// <summary>
+    /// Solves the theorem using Z3 and, when it is satisfiable, hands the caller a witness
+    /// evaluator over the live model.
+    /// </summary>
+    /// <typeparam name="T">Theorem environment type.</typeparam>
+    /// <param name="inspect">
+    /// Callback receiving the witness evaluator. Not invoked when the theorem has no solution, and
+    /// the evaluator must not be kept beyond it - the native context is disposed on return.
+    /// </param>
+    /// <param name="cancellationToken">A token that interrupts the solve.</param>
+    /// <returns>Result of solving the theorem; <c>default(T)</c> if the theorem cannot be satisfied.</returns>
+    /// <remarks>
+    /// The model a solve builds is otherwise discarded once the result object is populated, so a
+    /// quantity that is not itself a member of <typeparamref name="T"/> - a derived
+    /// <c>t =&gt; t.X + t.Y</c>, or a relational fact - cannot be read back at all. The witness is
+    /// evaluated under the same model that produced the result, so the two agree by construction.
+    /// </remarks>
+    protected T? Solve<T>(Action<ModelWitness<T>> inspect, CancellationToken cancellationToken)
+    {
+        return this.TrySolve<T>(inspect, out T? result, cancellationToken) ? result : default;
+    }
+
+    /// <summary>
     /// Solves the theorem using Z3, reporting satisfiability separately from the solution.
     /// </summary>
     /// <typeparam name="T">Theorem environment type.</typeparam>
@@ -117,6 +139,25 @@ public class Theorem
     /// <exception cref="TheoremUndecidedException">Z3 stopped without deciding - a limit on the <see cref="Z3Context"/> was reached, or it gave up.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     protected bool TrySolve<T>([MaybeNullWhen(false)] out T result, CancellationToken cancellationToken)
+    {
+        return this.TrySolve<T>(null, out result, cancellationToken);
+    }
+
+    /// <summary>
+    /// Solves the theorem using Z3, reporting satisfiability separately from the solution and, when
+    /// it is satisfiable, handing the caller a witness evaluator over the live model.
+    /// </summary>
+    /// <typeparam name="T">Theorem environment type.</typeparam>
+    /// <param name="inspect">
+    /// Callback receiving the witness evaluator, or <see langword="null"/> to skip witness
+    /// inspection. Not invoked when the theorem has no solution.
+    /// </param>
+    /// <param name="result">The solution, when the theorem could be satisfied.</param>
+    /// <param name="cancellationToken">A token that interrupts the solve.</param>
+    /// <returns><see langword="true"/> if the theorem was satisfiable; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="TheoremUndecidedException">Z3 stopped without deciding - a limit on the <see cref="Z3Context"/> was reached, or it gave up.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    protected bool TrySolve<T>(Action<ModelWitness<T>>? inspect, [MaybeNullWhen(false)] out T result, CancellationToken cancellationToken)
     {
         using Context ctx = this.context.CreateContext();
         var environment = GetEnvironment(ctx, typeof(T));
@@ -134,8 +175,60 @@ public class Theorem
             return false;
         }
 
+        // The witness is read under the model that produced the solution, so it has to run before
+        // the context goes away with this method.
+        inspect?.Invoke(new ModelWitness<T>(ctx, solver.Model, environment));
+
         result = GetSolution<T>(ctx, solver.Model, environment, this.template);
         return true;
+    }
+
+    /// <summary>
+    /// Evaluates any sub-expression over the theorem's environment under the satisfying model.
+    /// </summary>
+    /// <typeparam name="T">Theorem environment type.</typeparam>
+    /// <remarks>
+    /// Handed to the caller by <see cref="Solve{T}(Action{ModelWitness{T}}, CancellationToken)"/>
+    /// while the model and its native context are still alive; it is not valid afterwards. The
+    /// translation and the scalar read are exactly the ones a solution member goes through, so a
+    /// witness agrees with the returned member it mirrors.
+    /// </remarks>
+    public sealed class ModelWitness<T>
+    {
+        private readonly Context context;
+        private readonly Model model;
+        private readonly Environment environment;
+
+        internal ModelWitness(Context context, Model model, Environment environment)
+        {
+            this.context = context;
+            this.model = model;
+            this.environment = environment;
+        }
+
+        /// <summary>
+        /// Translates a sub-expression over the theorem environment and evaluates it under the model.
+        /// </summary>
+        /// <typeparam name="TResult">Scalar result type, such as <c>int</c> or <c>bool</c>.</typeparam>
+        /// <param name="expression">A sub-expression over the environment, such as <c>t =&gt; t.X + t.Y</c>.</param>
+        /// <returns>The value of the sub-expression under the satisfying model.</returns>
+        /// <remarks>
+        /// The model is partial, so an expression the solver never needed an interpretation for is
+        /// completed here: the witness then reports the value Z3 supplies, which is the value the
+        /// corresponding member is read with too.
+        /// </remarks>
+        public TResult Eval<TResult>(Expression<Func<T, TResult>> expression)
+        {
+            // PartialEval only accepts a lambda, so the body is folded inside a parameterless
+            // one and taken back out - the same shape the visitor uses for a captured constant.
+            Expression body = MiaPlaza.ExpressionUtils.PartialEvaluator.PartialEval(
+                Expression.Lambda(expression.Body),
+                MiaPlaza.ExpressionUtils.Evaluating.ExpressionInterpreter.Instance).Body;
+            Expr handle = ExpressionVisitor.Translate(this.context, this.environment, body, expression.Parameters[0]);
+            Expr value = EvaluateWithCompletion(this.model, handle);
+
+            return (TResult)ReadZ3Value(value, Type.GetTypeCode(typeof(TResult)), "witness", null);
+        }
     }
 
     /// <summary>
@@ -973,6 +1066,13 @@ public class Theorem
 
             return result;
         }
+        else if (!t.IsValueType && t.GetConstructor(Type.EmptyTypes) == null)
+        {
+            // A type built through a constructor rather than through property setters - most
+            // notably a positional record, whose members are init-only and which has no public
+            // parameterless constructor, so the branch below cannot run at all.
+            return ConstructFromModel(t, context, model, environment, template);
+        }
         else
         {
             // Straightforward case of having an "onymous type" at hand.
@@ -998,6 +1098,62 @@ public class Theorem
 
             return result;
         }
+    }
+
+    /// <summary>
+    /// Reconstructs the solution for a type initialised through a constructor rather than through
+    /// property setters: a positional record, or any immutable type whose only constructor takes the
+    /// bound members as parameters.
+    /// </summary>
+    /// <param name="t">Environment type to create an instance of.</param>
+    /// <param name="context">Z3 context.</param>
+    /// <param name="model">Z3 model to evaluate theorem parameters under.</param>
+    /// <param name="environment">Environment with bindings of theorem variables to Z3 handles.</param>
+    /// <param name="template">An instance of <paramref name="t"/> whose collections give the solution's their length, or null.</param>
+    /// <returns>Instance of the environment type with theorem-satisfying values.</returns>
+    /// <exception cref="NotSupportedException">No constructor's parameters can all be read from the environment.</exception>
+    /// <remarks>
+    /// Each constructor parameter is matched to an environment-bound member by name and passed
+    /// positionally, so the order the environment happens to hold its members in never decides
+    /// the order the constructor receives them in.
+    /// </remarks>
+    private static object ConstructFromModel(Type t, Context context, Model model, Environment environment, object? template)
+    {
+        var membersByName = environment.Properties.Keys
+            .ToDictionary(m => m.Name, StringComparer.Ordinal);
+
+        // The primary constructor is the one every parameter of which can be read from the
+        // environment; a type may carry others (a copy constructor, a convenience overload), so the
+        // longest match is the one that initialises the most members.
+        ConstructorInfo ctor = t.GetConstructors()
+            .Where(c => c.GetParameters().Length > 0
+                && c.GetParameters().All(p => p.Name is not null && membersByName.ContainsKey(p.Name)))
+            .OrderByDescending(c => c.GetParameters().Length)
+            .FirstOrDefault()
+            ?? throw new NotSupportedException(
+                $"Type {t.Name} has no parameterless constructor and no constructor whose parameters "
+                + $"match the theorem environment members ({string.Join(", ", membersByName.Keys)}).");
+
+        ParameterInfo[] parameters = ctor.GetParameters();
+        var arguments = new object?[parameters.Length];
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            MemberInfo member = membersByName[parameters[i].Name!];
+
+            // Only a collection-valued member reads the destination object, and the instance being
+            // built here does not exist yet: the template supplies the length instead, exactly as
+            // it does for a named environment.
+            arguments[i] = ConvertZ3Expression(
+                null!,
+                context,
+                model,
+                environment.Properties[member],
+                member,
+                template);
+        }
+
+        return ctor.Invoke(arguments);
     }
 
     /// <summary>

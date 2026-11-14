@@ -77,6 +77,6 @@ public class CollectibleTypeTests
 
         object constrained = theorem.GetType().GetMethod("Where")!.Invoke(theorem, [constraint])!;
 
-        return constrained.GetType().GetMethod("Solve")!.Invoke(constrained, [default(CancellationToken)])!;
+        return constrained.GetType().GetMethod("Solve", [typeof(CancellationToken)])!.Invoke(constrained, [default(CancellationToken)])!;
     }
 }

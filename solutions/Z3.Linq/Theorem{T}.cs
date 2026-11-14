@@ -95,6 +95,36 @@ public class Theorem<T> : Theorem, ISolveable<T>
     }
 
     /// <summary>
+    /// Solves the theorem and, when it is satisfiable, hands the caller a witness evaluator over
+    /// the live model.
+    /// </summary>
+    /// <param name="inspect">
+    /// Callback receiving the witness evaluator. Not invoked when the theorem has no solution, and
+    /// the evaluator must not be kept beyond it - the native context is disposed on return.
+    /// </param>
+    /// <param name="cancellationToken">A token that interrupts the solve.</param>
+    /// <returns>
+    /// Environment type instance with properties set to theorem-satisfying values, or
+    /// <c>default(T)</c> if the theorem cannot be satisfied.
+    /// </returns>
+    /// <exception cref="TheoremUndecidedException">
+    /// Z3 stopped without deciding: the <see cref="Z3Context.Timeout"/> or
+    /// <see cref="Z3Context.ResourceLimit"/> was reached, or Z3 gave up. See #85.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <remarks>
+    /// <see cref="Solve(CancellationToken)"/> computes a model and then discards it once the result
+    /// object is populated, so a value that is not itself a member of
+    /// <typeparamref name="T"/> - the derived quantity <c>t =&gt; t.X + t.Y</c>, or a relational
+    /// fact <c>t =&gt; t.X &lt; t.Y</c> - cannot be read back at all. The witness evaluates it under
+    /// the very model that produced the solution, so the two agree by construction.
+    /// </remarks>
+    public T? Solve(Action<ModelWitness<T>> inspect, CancellationToken cancellationToken = default)
+    {
+        return base.Solve<T>(inspect, cancellationToken);
+    }
+
+    /// <summary>
     /// Solves the theorem, reporting satisfiability separately from the solution.
     /// </summary>
     /// <param name="result">The solution, when the theorem could be satisfied.</param>
@@ -110,7 +140,7 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// <remarks>
     /// The only form that answers "is there a solution?" for every environment type. What is
     /// written into <paramref name="result"/> when this returns <see langword="true"/> is exactly
-    /// what <see cref="Solve"/> would have returned. <see langword="false"/> means the theorem was
+    /// what <see cref="Solve(CancellationToken)"/> would have returned. <see langword="false"/> means the theorem was
     /// proved to have no solution - a solve that stopped without deciding throws instead.
     /// </remarks>
     public bool TrySolve([MaybeNullWhen(false)] out T result, CancellationToken cancellationToken = default)
@@ -135,9 +165,9 @@ public class Theorem<T> : Theorem, ISolveable<T>
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     /// <remarks>
-    /// Carries the same ambiguity as <see cref="Solve"/>, and answers it the same way - through
+    /// Carries the same ambiguity as <see cref="Solve(CancellationToken)"/>, and answers it the same way - through
     /// <see cref="TryOptimize{TResult}(Optimization, Expression{Func{T, TResult}}, out T, CancellationToken)"/>.
-    /// As with <see cref="Solve"/>, a symbol that no constraint mentions is free and takes an
+    /// As with <see cref="Solve(CancellationToken)"/>, a symbol that no constraint mentions is free and takes an
     /// arbitrary value; the objective determines only what it is written in terms of.
     /// </remarks>
     public T? Optimize<TResult>(Optimization direction, Expression<Func<T, TResult>> lambda, CancellationToken cancellationToken = default)

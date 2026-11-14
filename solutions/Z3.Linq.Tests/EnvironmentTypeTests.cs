@@ -344,23 +344,28 @@ public class EnvironmentTypeTests
     }
 
     /// <summary>
-    /// A positional record cannot be used as an environment.
+    /// A positional record environment is solved through its primary constructor.
     /// </summary>
     /// <remarks>
-    /// Environments are constructed with <c>Activator.CreateInstance(t)</c> (Theorem.cs:656),
-    /// and a positional record's only constructor takes its members, so there is nothing to
-    /// call. This is the distinction the stale comment on RecordTheorem was probably reaching
-    /// for: records work, positional records do not.
+    /// A positional record has no parameterless constructor, so <c>Activator.CreateInstance</c>
+    /// cannot build it. The constructor path (<c>ConstructFromModel</c>) matches each parameter to
+    /// an environment-bound member by name and invokes the primary constructor with the values the
+    /// model supplies. This is the distinction the stale comment on RecordTheorem was probably
+    /// reaching for, now resolved: records work, and positional records work too.
     /// </remarks>
     [TestMethod]
-    public void Solve_PositionalRecordEnvironment_ThrowsMissingMethodException()
+    public void Solve_PositionalRecordEnvironment_IsConstructedFromModel()
     {
         // Arrange
         using var context = new Z3Context();
         var theorem = context.NewTheorem<PositionalRecord>().Where(t => t.X);
 
-        // Act & Assert
-        Should.Throw<MissingMethodException>(() => theorem.Solve());
+        // Act
+        var result = theorem.Solve();
+
+        // Assert
+        result.ShouldNotBeNull();
+        result!.X.ShouldBeTrue();
     }
 
     [TestMethod]
