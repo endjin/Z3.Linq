@@ -187,9 +187,13 @@ internal sealed class ExpressionVisitor
         // This used to be a switch on the target type alone, which assumed the operand sort from
         // it - int-to-real for every conversion to double, real-to-int for every conversion to
         // int - and had no arm at all for long, float or decimal. See #63 and #76.
-        Sort? targetSort = expression.Type == typeof(char)
+        // The target is asked for the sort its symbols are declared with, so a type carrying a
+        // TheoremVariableTypeMappingAttribute is converted to the sort of the type it stands for.
+        Type targetType = Theorem.MappedType(expression.Type);
+
+        Sort? targetSort = targetType == typeof(char)
             ? this.context.IntSort
-            : Theorem.TryGetSymbolSort(this.context, Type.GetTypeCode(expression.Type));
+            : Theorem.TryGetSymbolSort(this.context, Type.GetTypeCode(targetType));
 
         if (targetSort is not null)
         {
@@ -197,7 +201,17 @@ internal sealed class ExpressionVisitor
             // translating it from the sorts alone would drop whatever the operator does. Decimal's
             // built-in conversions are operator methods on decimal too, and are the numeric
             // conversions translated here; any other operator is refused.
-            if (expression.Method is { } method && method.DeclaringType != typeof(decimal))
+            //
+            // The exception is the identity construction promised by a variable type mapping: the
+            // cast's target carries the mapping, and its operator accepts the regular type and
+            // returns that same target. The sort conversion below stands in for the constructor.
+            // An arbitrary instance of the mapped type is still refused by VisitConstantValue.
+            if (expression.Method is { } method && method.DeclaringType != typeof(decimal)
+                && !(expression.Method.IsSpecialName
+                    && (expression.Method.Name == "op_Implicit" || expression.Method.Name == "op_Explicit")
+                    && expression.Method.ReturnType == expression.Type
+                    && expression.Method.GetParameters() is [{ } parameter]
+                    && parameter.ParameterType == targetType))
             {
                 throw new NotSupportedException(
                     $"The conversion '{expression}' calls the user-defined operator {method.DeclaringType}.{method.Name}, which cannot be translated: only built-in numeric conversions are supported.");
